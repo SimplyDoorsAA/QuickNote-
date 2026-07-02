@@ -37,14 +37,15 @@
         .pinned-note { border-color: #525252; background: linear-gradient(180deg, #18181b 0%, #121212 100%); }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body class="h-screen flex flex-col overflow-hidden relative">
 
+    <!-- Header -->
     <header class="bg-[#0a0a0a] border-b border-subtle p-4 flex items-center justify-between shrink-0 z-40">
         <div class="flex items-center gap-4">
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v1.9</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.0</span>
         </div>
         
         <div class="flex items-center gap-3">
@@ -57,6 +58,7 @@
         </div>
     </header>
 
+    <!-- Global Search Overlay -->
     <div id="globalSearchOverlay" class="hidden absolute top-[70px] left-0 w-full z-50 p-4">
         <div class="max-w-2xl mx-auto panel-bg border border-subtle rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div class="p-4 border-b border-subtle flex items-center gap-3 bg-[#0a0a0a]">
@@ -68,76 +70,40 @@
         </div>
     </div>
 
+    <!-- Main Workspace -->
     <main class="flex-1 w-full flex flex-col md:flex-row overflow-hidden relative">
         
+        <!-- Left Panel: Dedicated Core Feed Window -->
         <div id="leftPanel" class="w-full md:w-[400px] lg:w-[450px] flex flex-col border-r border-subtle h-full absolute md:relative z-30 bg-[#050505] transition-transform duration-300">
             
-            <div class="p-4 border-b border-subtle shrink-0 relative z-40 bg-[#050505]">
-                <div class="panel-bg border border-subtle rounded-xl p-5 shadow-lg flex flex-col gap-4">
-                    <label class="block text-xs font-semibold text-neutral-500 uppercase tracking-wider">Fast Entry Logging</label>
-                    
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <i data-lucide="target" class="w-4 h-4 text-neutral-500"></i>
-                        </div>
-                        <input type="text" id="jobSearchInput" placeholder="Select target job..." 
-                               class="w-full input-bg border border-subtle rounded-lg py-2.5 pl-10 pr-10 text-sm focus:outline-none focus:border-white text-white font-medium transition-colors shadow-inner"
-                               autocomplete="off">
-                        
-                        <button id="clearJobSearchBtn" onclick="clearTargetJob()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-500 hover:text-white">
-                            <i data-lucide="x-circle" class="w-4 h-4"></i>
+            <div class="p-4 border-b border-subtle shrink-0 space-y-4 bg-[#050505]">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-neutral-400 uppercase tracking-wider">Active Tickets</h2>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openFastEntry()" class="hidden md:flex text-xs bg-emerald-950 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md items-center gap-1.5 transition-colors border border-emerald-900 font-bold shadow-sm">
+                            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Log Update
                         </button>
-                        
-                        <input type="hidden" id="quickNoteJobId">
-                        <div id="jobDropdown" class="hidden absolute top-full mt-2 w-full panel-bg border border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto"></div>
-                    </div>
-
-                    <textarea id="quickNoteText" rows="1" placeholder="Type or dictate site updates..." 
-                              oninput="autoExpand(this)"
-                              class="w-full input-bg border border-subtle rounded-lg p-3 text-sm focus:outline-none focus:border-neutral-500 transition-colors resize-none shadow-inner overflow-hidden"></textarea>
-                    
-                    <div id="imagePreviewContainer" class="hidden relative w-full h-32 rounded-md border border-subtle bg-black overflow-hidden flex items-center justify-center">
-                        <img id="imagePreview" src="" class="max-w-full max-h-full object-contain">
-                        <button onclick="clearImage()" class="absolute top-2 right-2 bg-black/80 p-1.5 rounded text-white hover:text-red-400 backdrop-blur-sm transition-colors">
-                            <i data-lucide="x" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-
-                    <div class="flex gap-2 items-center justify-between">
-                        <label class="p-2.5 input-bg border border-subtle rounded-lg text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors cursor-pointer inline-block shadow-sm">
-                            <i data-lucide="camera" class="w-5 h-5"></i>
-                            <input type="file" accept="image/*" capture="environment" class="hidden" id="cameraInput" onchange="handleImageSelection(event)">
-                        </label>
-                        <button id="submitNoteBtn" onclick="submitQuickNote()" class="flex-1 bg-white hover:bg-neutral-200 text-black px-4 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm">
-                            Log Note
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex-1 flex flex-col min-h-0 relative z-20">
-                <div class="px-4 pt-4 pb-2 shrink-0 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-semibold text-neutral-400 uppercase tracking-wider">Active Tickets</h2>
                         <button onclick="openNewJobModal()" class="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors border border-subtle font-medium shadow-sm">
                             <i data-lucide="plus" class="w-3.5 h-3.5"></i> New Ticket
                         </button>
                     </div>
-                    
-                    <div class="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1">
-                        <button onclick="setDashboardFilter('all')" id="flt-all" class="filter-btn bg-neutral-800 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-neutral-600 whitespace-nowrap shrink-0 transition-colors">All</button>
-                        <button onclick="setDashboardFilter('contacted')" id="flt-contacted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Contacted</button>
-                        <button onclick="setDashboardFilter('estimating')" id="flt-estimating" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Estimating</button>
-                        <button onclick="setDashboardFilter('quoted')" id="flt-quoted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Quoted</button>
-                        <button onclick="setDashboardFilter('done')" id="flt-done" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Done</button>
-                    </div>
                 </div>
                 
-                <div id="jobListContainer" class="p-4 pt-0 space-y-3 flex-1 overflow-y-auto pr-3 custom-scrollbar overflow-x-hidden">
-                    </div>
+                <div class="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1">
+                    <button onclick="setDashboardFilter('all')" id="flt-all" class="filter-btn bg-neutral-800 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-neutral-600 whitespace-nowrap shrink-0 transition-colors">All</button>
+                    <button onclick="setDashboardFilter('contacted')" id="flt-contacted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Contacted</button>
+                    <button onclick="setDashboardFilter('estimating')" id="flt-estimating" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Estimating</button>
+                    <button onclick="setDashboardFilter('quoted')" id="flt-quoted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Quoted</button>
+                    <button onclick="setDashboardFilter('done')" id="flt-done" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Done</button>
+                </div>
+            </div>
+            
+            <div id="jobListContainer" class="p-4 space-y-3 flex-1 overflow-y-auto pr-3 custom-scrollbar overflow-x-hidden">
+                <!-- Jobs Injected via JS -->
             </div>
         </div>
 
+        <!-- Right Panel: Specific Job Detail View -->
         <div id="rightPanel" class="w-full md:flex-1 h-full bg-[#050505] absolute md:relative z-10 hidden md:flex flex-col translate-x-full md:translate-x-0 transition-transform duration-300">
             
             <div id="jobDetailHeader" class="panel-bg border-b border-subtle p-4 flex items-center gap-4 shrink-0 hidden z-20">
@@ -167,16 +133,85 @@
                 </button>
             </div>
 
+            <!-- Empty State -->
             <div id="emptyDetailState" class="flex-1 flex flex-col items-center justify-center text-neutral-600">
                 <i data-lucide="clipboard-list" class="w-12 h-12 mb-3 opacity-20"></i>
                 <p class="text-sm">Select a job ticket to view details.</p>
             </div>
 
             <div class="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-5 hidden" id="jobNotesFeed">
-                </div>
+                <!-- Notes injected via JS -->
+            </div>
         </div>
     </main>
 
+    <!-- Mobile Floating Action Button -->
+    <button onclick="openFastEntry()" class="md:hidden fixed bottom-6 right-6 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-5 py-4 rounded-full shadow-2xl z-40 flex items-center gap-2 active:scale-95 transition-transform tracking-wide">
+        <i data-lucide="plus-circle" class="w-5 h-5"></i> Log Update
+    </button>
+
+    <!-- STEP-BY-STEP GUIDED POP-OUT OVERLAY -->
+    <div id="fastEntryOverlay" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex-col p-4 md:p-8 overflow-y-auto">
+        
+        <!-- Navigation Header Component -->
+        <div class="flex justify-between items-center mb-6 shrink-0 max-w-2xl mx-auto w-full">
+            <button id="overlayBackButton" onclick="goBackToStep1()" class="hidden text-neutral-400 hover:text-white flex items-center gap-1 text-sm font-semibold py-1 px-3 bg-neutral-900 border border-subtle rounded-lg transition-colors">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+            </button>
+            <div id="overlayTitle" class="text-xs font-mono uppercase tracking-widest text-neutral-500 font-bold">Step 1: Select Project</div>
+            <button onclick="closeFastEntry()" class="text-neutral-400 hover:text-white p-2 bg-neutral-900 border border-subtle rounded-full ml-auto transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- STEP 1: TARGET SELECTION SCREEN -->
+        <div id="overlayStep1" class="flex-1 max-w-2xl mx-auto w-full flex flex-col min-h-0">
+            <div class="relative mb-5 shrink-0">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i data-lucide="search" class="w-4 h-4 text-neutral-500"></i>
+                </div>
+                <input type="text" id="overlayJobSearchInput" oninput="renderOverlayJobs(this.value)" placeholder="Search active projects to log to..." class="w-full input-bg border border-subtle rounded-xl py-3.5 pl-10 pr-4 text-sm focus:outline-none focus:border-neutral-500 text-white font-medium shadow-inner">
+            </div>
+            <div id="overlayJobList" class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 pb-4">
+                <!-- Project cards injected dynamically -->
+            </div>
+        </div>
+
+        <!-- STEP 2: EXPANSIVE CANVASS INPUT SCREEN -->
+        <div id="overlayStep2" class="hidden flex-1 max-w-2xl mx-auto w-full flex flex-col min-h-0 gap-4">
+            <div class="panel-bg border border-subtle rounded-xl p-4 flex items-center justify-between shrink-0 shadow-md">
+                <div class="truncate pr-2">
+                    <span class="text-[9px] font-bold uppercase tracking-widest text-emerald-400 block mb-0.5">Logging Cloud Update To:</span>
+                    <h3 id="overlaySelectedJobName" class="text-base font-extrabold text-white truncate"></h3>
+                </div>
+                <span id="overlaySelectedJobAddress" class="text-xs text-neutral-500 truncate max-w-[180px] hidden sm:inline"></span>
+            </div>
+
+            <textarea id="quickNoteText" oninput="autoExpand(this)" placeholder="Type or dictate site measurements, delivery status, or punch-list items..." class="flex-1 w-full input-bg border border-subtle rounded-xl p-4 text-base md:text-lg text-white focus:outline-none focus:border-neutral-500 transition-colors resize-none shadow-inner overflow-y-auto leading-relaxed" rows="4"></textarea>
+            
+            <input type="hidden" id="quickNoteJobId">
+
+            <!-- Hardware Image Attachment Component -->
+            <div id="imagePreviewContainer" class="hidden relative w-full h-40 rounded-xl border border-subtle bg-black overflow-hidden flex items-center justify-center shrink-0 shadow-lg animate-fade-in">
+                <img id="imagePreview" src="" class="max-w-full max-h-full object-contain">
+                <button onclick="clearImage()" class="absolute top-3 right-3 bg-black/80 p-2 rounded-lg text-white hover:text-red-400 backdrop-blur-sm transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="flex gap-3 items-center justify-between shrink-0 pb-6">
+                <label class="p-4 input-bg border border-subtle rounded-xl text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors cursor-pointer inline-block shadow-md active:scale-95">
+                    <i data-lucide="camera" class="w-6 h-6"></i>
+                    <input type="file" accept="image/*" capture="environment" class="hidden" id="cameraInput" onchange="handleImageSelection(event)">
+                </label>
+                <button id="submitNoteBtn" onclick="submitQuickNote()" class="flex-1 bg-white hover:bg-neutral-200 text-black py-4 rounded-xl text-base font-bold transition-all shadow-xl active:scale-[0.99] tracking-wide">
+                    Save Cloud Log
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals Structural Isolation Layout components -->
     <div id="imageViewerModal" class="hidden fixed inset-0 z-[60] bg-black/95 items-center justify-center p-2 md:p-8 backdrop-blur-sm transition-opacity">
         <button onclick="closeImageViewer()" class="absolute top-4 right-4 md:top-6 md:right-6 text-neutral-400 hover:text-white p-2 z-[70] bg-black/50 rounded-full transition-colors"><i data-lucide="x" class="w-8 h-8"></i></button>
         <img id="viewerImage" src="" class="max-w-full max-h-full object-contain rounded-md shadow-2xl">
@@ -216,11 +251,12 @@
         </div>
     </div>
 
+    <!-- Real-time Synchronization Engine -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // Integrated Configuration Object directly from console snapshot
+        // Verified active database configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAspc3YUZVBNvfGjbjKykwPvxeRoyAtYk",
             authDomain: "quicknote-eeec2.firebaseapp.com",
@@ -231,11 +267,9 @@
             measurementId: "G-53CQXRLK2B"
         };
 
-        // Initialize Firebase Backend
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Core Reactive Application State Arrays
         let jobs = [];
         let notes = [];
         let currentOpenJobId = null;
@@ -251,6 +285,9 @@
             });
             renderDashboard();
             renderJobHeader();
+            if(!document.getElementById('fastEntryOverlay').classList.contains('hidden') && !document.getElementById('overlayStep1').classList.contains('hidden')) {
+                renderOverlayJobs(document.getElementById('overlayJobSearchInput').value);
+            }
         });
 
         onSnapshot(collection(db, "notes"), (snapshot) => {
@@ -264,11 +301,8 @@
             }
         });
 
-        // Initialize Native Input Setup on Load Execution
-        setupDropdownLogic();
         lucide.createIcons();
 
-        // Global Outside Click Focus Modifiers
         document.addEventListener('click', (e) => {
             const statusBtn = document.getElementById('detailJobStatus');
             const statusMenu = document.getElementById('statusUpdateMenu');
@@ -283,7 +317,90 @@
             }
         });
 
-        // --- FAST ENTRY ENGINE ---
+        // --- GUIDED OVERLAY NAVIGATION MECHANICS ---
+        function openFastEntry() {
+            const overlay = document.getElementById('fastEntryOverlay');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            
+            // Context-Aware Selection Automation Logic
+            if (currentOpenJobId) {
+                const activeJob = jobs.find(j => String(j.id) === String(currentOpenJobId));
+                if (activeJob && !activeJob.archived) {
+                    selectOverlayJob(activeJob.id, activeJob.name, activeJob.address);
+                    return;
+                }
+            }
+            
+            goBackToStep1();
+        }
+
+        function closeFastEntry() {
+            const overlay = document.getElementById('fastEntryOverlay');
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+            resetTextarea();
+            clearImage();
+        }
+
+        function goBackToStep1() {
+            document.getElementById('quickNoteJobId').value = '';
+            document.getElementById('overlayStep2').classList.add('hidden');
+            document.getElementById('overlayStep1').classList.remove('hidden');
+            document.getElementById('overlayBackButton').classList.add('hidden');
+            document.getElementById('overlayTitle').innerText = "Step 1: Select Project";
+            document.getElementById('overlayJobSearchInput').value = '';
+            renderOverlayJobs('');
+            setTimeout(() => {
+                document.getElementById('overlayJobSearchInput').focus();
+            }, 50);
+        }
+
+        function selectOverlayJob(jobId, jobName, jobAddress) {
+            document.getElementById('quickNoteJobId').value = jobId;
+            document.getElementById('overlaySelectedJobName').innerText = jobName;
+            document.getElementById('overlaySelectedJobAddress').innerText = jobAddress || 'No Address Listed';
+            
+            document.getElementById('overlayStep1').classList.add('hidden');
+            document.getElementById('overlayStep2').classList.remove('hidden');
+            document.getElementById('overlayBackButton').classList.remove('hidden');
+            document.getElementById('overlayTitle').innerText = "Step 2: Log Site Update";
+            
+            setTimeout(() => {
+                document.getElementById('quickNoteText').focus();
+            }, 50);
+        }
+
+        function renderOverlayJobs(query = '') {
+            const listEl = document.getElementById('overlayJobList');
+            if(!listEl) return;
+            
+            const q = query.toLowerCase().trim();
+            const filtered = jobs.filter(j => !j.archived && (j.name.toLowerCase().includes(q) || j.address.toLowerCase().includes(q)));
+            
+            let htmlBuffer = '';
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<div class="p-6 text-center text-sm text-neutral-500 bg-[#121212] rounded-xl border border-subtle">No matching project tickets found.</div>`;
+                return;
+            }
+
+            filtered.forEach(job => {
+                htmlBuffer += `
+                    <div onclick="selectOverlayJob('${job.id}', \`${job.name.replace(/'/g, "\\'")}\`, \`${job.address.replace(/'/g, "\\'")}\`)" 
+                         class="p-5 bg-[#121212] border border-[#262626] hover:border-neutral-500 rounded-xl cursor-pointer transition-all active:scale-[0.99] flex items-center justify-between group">
+                        <div class="truncate pr-3">
+                            <h4 class="font-bold text-white text-base truncate">${job.name}</h4>
+                            <p class="text-xs text-neutral-400 truncate mt-1">${job.address || 'No Address Listed'}</p>
+                        </div>
+                        <div class="p-2 rounded-lg bg-[#1a1a1a] group-hover:bg-neutral-800 text-neutral-500 group-hover:text-white transition-colors shrink-0">
+                            <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                        </div>
+                    </div>`;
+            });
+            listEl.innerHTML = htmlBuffer;
+            lucide.createIcons();
+        }
+
         function autoExpand(field) {
             field.style.height = '1px';
             field.style.height = field.scrollHeight + 'px';
@@ -291,77 +408,10 @@
 
         function resetTextarea() {
             const field = document.getElementById('quickNoteText');
-            field.value = '';
-            field.style.height = 'auto';
-        }
-
-        function clearTargetJob() {
-            const input = document.getElementById('jobSearchInput');
-            input.value = '';
-            input.classList.remove('text-emerald-400');
-            input.classList.add('text-white');
-            document.getElementById('quickNoteJobId').value = '';
-            document.getElementById('clearJobSearchBtn').classList.add('hidden');
-            document.getElementById('jobDropdown').classList.add('hidden');
-        }
-
-        function setupDropdownLogic() {
-            const input = document.getElementById('jobSearchInput');
-            const dropdown = document.getElementById('jobDropdown');
-            const hiddenId = document.getElementById('quickNoteJobId');
-            const clearBtn = document.getElementById('clearJobSearchBtn');
-
-            if(!input) return;
-
-            input.addEventListener('focus', () => {
-                dropdown.classList.remove('hidden');
-                filterDropdown(input.value);
-            });
-
-            input.addEventListener('input', (e) => {
-                filterDropdown(e.target.value);
-                hiddenId.value = ''; 
-                input.classList.remove('text-emerald-400'); 
-                input.classList.add('text-white');
-                
-                if (e.target.value.trim() !== '') clearBtn.classList.remove('hidden');
-                else clearBtn.classList.add('hidden');
-            });
-
-            document.addEventListener('click', (e) => {
-                if (!input.contains(e.target) && !dropdown.contains(e.target) && !clearBtn.contains(e.target)) {
-                    dropdown.classList.add('hidden');
-                }
-            });
-        }
-
-        function filterDropdown(query = '') {
-            const dropdown = document.getElementById('jobDropdown');
-            dropdown.innerHTML = '';
-            
-            const activeJobs = jobs.filter(j => !j.archived);
-            const filtered = activeJobs.filter(j => j.name.toLowerCase().includes(query.toLowerCase()) || j.address.toLowerCase().includes(query.toLowerCase()));
-
-            if (filtered.length === 0) {
-                dropdown.innerHTML = `<div class="p-3 text-xs text-neutral-500">No active jobs found.</div>`;
-                return;
+            if (field) {
+                field.value = '';
+                field.style.height = 'auto';
             }
-
-            filtered.forEach(job => {
-                const div = document.createElement('div');
-                div.className = 'p-3 hover:bg-neutral-800 cursor-pointer border-b border-subtle last:border-0 transition-colors';
-                div.innerHTML = `<div class="text-sm font-semibold text-white">${job.name}</div><div class="text-xs text-neutral-500 truncate mt-0.5">${job.address}</div>`;
-                div.onclick = () => {
-                    const input = document.getElementById('jobSearchInput');
-                    input.value = job.name;
-                    input.classList.remove('text-white');
-                    input.classList.add('text-emerald-400'); 
-                    document.getElementById('quickNoteJobId').value = job.id;
-                    document.getElementById('clearJobSearchBtn').classList.remove('hidden');
-                    dropdown.classList.add('hidden');
-                };
-                dropdown.appendChild(div);
-            });
         }
 
         // --- GLOBAL SEARCH SYSTEM ---
@@ -532,7 +582,7 @@
             const jobId = hiddenId.value;
 
             if (!text && !pendingImageData) return alert('Enter text or attach a photo.');
-            if (!jobId || !jobs.find(j => String(j.id) === String(jobId))) return alert('Select a valid target job from the dropdown.');
+            if (!jobId || !jobs.find(j => String(j.id) === String(jobId))) return alert('Target missing or structural mutation mismatched.');
 
             btn.disabled = true;
 
@@ -552,20 +602,19 @@
                     updatedAt: new Date().toISOString()
                 });
 
-                resetTextarea();
-                clearTargetJob();
-                clearImage(); 
-                
                 const originalText = btn.innerHTML;
-                btn.innerHTML = 'Logged ✓';
+                btn.innerHTML = 'Saved to Cloud ✓';
                 btn.classList.replace('bg-white', 'bg-emerald-500');
                 btn.classList.replace('text-black', 'text-white');
+                
                 setTimeout(() => {
                     btn.innerHTML = originalText;
                     btn.classList.replace('bg-emerald-500', 'bg-white');
                     btn.classList.replace('text-white', 'text-black');
                     btn.disabled = false;
-                }, 1500);
+                    closeFastEntry();
+                    openJobDetail(jobId);
+                }, 1000);
 
             } catch (e) {
                 console.error("Cloud Sync Write Failure: ", e);
@@ -746,8 +795,7 @@
                                 <span class="text-[10px] text-neutral-400 bg-black px-2 py-0.5 rounded border border-subtle font-medium">${jobNotesCount} logs</span>
                             </div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
 
             listEl.innerHTML = htmlBuffer;
@@ -908,8 +956,7 @@
                         <div class="flex justify-end mt-3 pt-3 border-t border-[#1f1f1f]">
                             <span class="text-[10px] font-medium text-neutral-500 tracking-wider">${timeString}</span>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
             
             feedEl.innerHTML = htmlBuffer;
@@ -951,8 +998,12 @@
         });
 
         // --- GLOBAL EXPOSURE BRIDGE (MODULE SCOPE COMPLIANCE) ---
+        window.openFastEntry = openFastEntry;
+        window.closeFastEntry = closeFastEntry;
+        window.goBackToStep1 = goBackToStep1;
+        window.selectOverlayJob = selectOverlayJob;
+        window.renderOverlayJobs = renderOverlayJobs;
         window.autoExpand = autoExpand;
-        window.clearTargetJob = clearTargetJob;
         window.toggleGlobalSearch = toggleGlobalSearch;
         window.executeGlobalSearch = executeGlobalSearch;
         window.jumpToJob = jumpToJob;
