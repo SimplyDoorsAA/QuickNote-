@@ -35,7 +35,6 @@
         .swipe-card { transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
         .pinned-note { border-color: #525252; background: linear-gradient(180deg, #18181b 0%, #121212 100%); }
     </style>
-    <!-- Map for Generative AI SDK -->
     <script type="importmap">
       {
         "imports": {
@@ -52,10 +51,15 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.1</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.1.1 (Migration)</span>
         </div>
         
         <div class="flex items-center gap-3">
+            <!-- Data Migration Tool -->
+            <button id="migrateDataBtn" onclick="migrateLocalDataToFirebase()" class="text-amber-500 hover:text-amber-400 transition-colors bg-amber-950/30 border border-amber-900/50 px-3 py-1.5 rounded-md shadow-sm text-xs font-bold flex items-center gap-1.5 mr-2">
+                <i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>
+            </button>
+
             <button onclick="toggleApiKeyModal()" class="text-neutral-500 hover:text-amber-400 transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm" title="Configure AI">
                 <i data-lucide="cpu" class="w-4 h-4"></i>
             </button>
@@ -143,7 +147,6 @@
                 </button>
             </div>
 
-            <!-- Empty State -->
             <div id="emptyDetailState" class="flex-1 flex flex-col items-center justify-center text-neutral-600">
                 <i data-lucide="clipboard-list" class="w-12 h-12 mb-3 opacity-20"></i>
                 <p class="text-sm">Select a job ticket to view details.</p>
@@ -180,7 +183,6 @@
                 <input type="text" id="overlayJobSearchInput" oninput="renderOverlayJobs(this.value)" placeholder="Search active projects to log to..." class="w-full input-bg border border-subtle rounded-xl py-3.5 pl-10 pr-4 text-sm focus:outline-none focus:border-neutral-500 text-white font-medium shadow-inner">
             </div>
             <div id="overlayJobList" class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 pb-4">
-                <!-- Project cards injected dynamically -->
             </div>
         </div>
 
@@ -210,7 +212,6 @@
                     <input type="file" accept="image/*" capture="environment" class="hidden" id="cameraInput" onchange="handleImageSelection(event)">
                 </label>
                 
-                <!-- AI Smart Capture Button -->
                 <button id="aiLogBtn" onclick="processAILog()" class="p-4 bg-amber-950 border border-amber-900 text-amber-500 hover:text-amber-400 hover:bg-amber-900 rounded-xl font-bold transition-all shadow-md active:scale-95 flex items-center gap-2" title="Let AI parse and route this text">
                     <i data-lucide="sparkles" class="w-6 h-6"></i>
                 </button>
@@ -302,11 +303,10 @@
         let isMobileDetailView = false;
         let currentDashboardFilter = 'all';
 
+        // Listeners for Firebase Sync
         onSnapshot(collection(db, "jobs"), (snapshot) => {
             jobs = [];
-            snapshot.forEach((doc) => {
-                jobs.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach((doc) => { jobs.push({ id: doc.id, ...doc.data() }); });
             renderDashboard();
             renderJobHeader();
             if(!document.getElementById('fastEntryOverlay').classList.contains('hidden') && !document.getElementById('overlayStep1').classList.contains('hidden')) {
@@ -316,14 +316,77 @@
 
         onSnapshot(collection(db, "notes"), (snapshot) => {
             notes = [];
-            snapshot.forEach((doc) => {
-                notes.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach((doc) => { notes.push({ id: doc.id, ...doc.data() }); });
             renderDashboard();
             if (currentOpenJobId) renderJobNotes();
         });
 
         lucide.createIcons();
+
+        // --- NEW MIGRATION TOOL ---
+        async function migrateLocalDataToFirebase() {
+            const btn = document.getElementById('migrateDataBtn');
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> <span class="hidden sm:inline">Migrating...</span>';
+            lucide.createIcons();
+            btn.disabled = true;
+
+            try {
+                // Pull legacy data from device memory
+                const localJobs = JSON.parse(localStorage.getItem('pm_jobs')) || [];
+                const localNotes = JSON.parse(localStorage.getItem('pm_notes')) || [];
+
+                // Push Jobs
+                for (const job of localJobs) {
+                    await setDoc(doc(db, "jobs", String(job.id)), {
+                        id: String(job.id),
+                        name: job.name,
+                        address: job.address || '',
+                        status: job.status,
+                        archived: job.archived || false,
+                        createdAt: job.createdAt || new Date().toISOString(),
+                        updatedAt: job.updatedAt || job.createdAt || new Date().toISOString()
+                    }, { merge: true });
+                }
+
+                // Push Notes and convert base64 images to Storage URLs
+                for (const note of localNotes) {
+                    let imageUrl = note.image;
+
+                    if (imageUrl && imageUrl.startsWith('data:image')) {
+                        const storageRef = ref(storage, `notes_images/migrated_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`);
+                        await uploadString(storageRef, imageUrl, 'data_url');
+                        imageUrl = await getDownloadURL(storageRef);
+                    }
+
+                    await setDoc(doc(db, "notes", String(note.id)), {
+                        id: String(note.id),
+                        jobId: String(note.jobId),
+                        content: note.content || '',
+                        image: imageUrl || null,
+                        pinned: note.pinned || false,
+                        timestamp: note.timestamp || new Date().toISOString()
+                    }, { merge: true });
+                }
+
+                // Visual Success Feedback
+                btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> <span class="hidden sm:inline">Success!</span>';
+                btn.classList.replace('bg-amber-950/30', 'bg-emerald-950/50');
+                btn.classList.replace('border-amber-900/50', 'border-emerald-900/50');
+                btn.classList.replace('text-amber-500', 'text-emerald-400');
+                lucide.createIcons();
+                
+                alert("Migration Complete! Your old local data is now synced to the Firebase cloud.");
+
+            } catch (error) {
+                console.error("Migration Error:", error);
+                alert("Migration failed. Please check your console or network connection.");
+                btn.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4"></i> <span class="hidden sm:inline">Failed</span>';
+                lucide.createIcons();
+                btn.disabled = false;
+            }
+        }
+        window.migrateLocalDataToFirebase = migrateLocalDataToFirebase;
+        // -------------------------
 
         function toggleApiKeyModal() {
             const modal = document.getElementById('apiKeyModal');
