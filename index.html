@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Aggressive Cache Busters to prevent GitHub Pages from serving dead code -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>PM Field Notes</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -35,13 +39,6 @@
         .swipe-card { transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
         .pinned-note { border-color: #525252; background: linear-gradient(180deg, #18181b 0%, #121212 100%); }
     </style>
-    <script type="importmap">
-      {
-        "imports": {
-          "@google/generative-ai": "https://esm.run/@google/generative-ai"
-        }
-      }
-    </script>
 </head>
 <body class="h-screen flex flex-col overflow-hidden relative">
 
@@ -51,10 +48,15 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.3</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.6 (Production Master)</span>
         </div>
         
         <div class="flex items-center gap-3">
+            <!-- Data Migration Tool -->
+            <button id="migrateDataBtn" onclick="migrateLocalDataToFirebase()" class="text-amber-500 hover:text-amber-400 transition-colors bg-amber-950/30 border border-amber-900/50 px-3 py-1.5 rounded-md shadow-sm text-xs font-bold flex items-center gap-1.5 mr-2">
+                <i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>
+            </button>
+
             <button onclick="toggleApiKeyModal()" class="text-neutral-500 hover:text-amber-400 transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm" title="Configure AI">
                 <i data-lucide="cpu" class="w-4 h-4"></i>
             </button>
@@ -280,12 +282,13 @@
 
     <!-- Active Service Logic Module Execution Engine -->
     <script type="module">
+        // Direct, strict ESM loading explicitly designed to bypass iOS Safari's erratic Import Map failures
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-        import { GoogleGenerativeAI } from "@google/generative-ai";
+        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-        // Production Configuration - wired to verified cloud instances
+        // Verified active database configuration
         const firebaseConfig = {
             apiKey: "AIzaSyDR918XHKZd3oLFqCMnyrLBRmLe1TajH3E",
             authDomain: "simplydoors-notes.firebaseapp.com",
@@ -337,6 +340,78 @@
             }
         });
 
+        // --- NEW MIGRATION TOOL ---
+        async function migrateLocalDataToFirebase() {
+            const btn = document.getElementById('migrateDataBtn');
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> <span class="hidden sm:inline">Migrating...</span>';
+            lucide.createIcons();
+            btn.disabled = true;
+
+            try {
+                // Pull legacy data from device memory
+                const localJobs = JSON.parse(localStorage.getItem('pm_jobs')) || [];
+                const localNotes = JSON.parse(localStorage.getItem('pm_notes')) || [];
+
+                if(localJobs.length === 0 && localNotes.length === 0) {
+                    alert("No local data found on this address to migrate.");
+                    btn.innerHTML = '<i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>';
+                    lucide.createIcons();
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Push Jobs
+                for (const job of localJobs) {
+                    await setDoc(doc(db, "jobs", String(job.id)), {
+                        id: String(job.id),
+                        name: job.name,
+                        address: job.address || '',
+                        status: job.status,
+                        archived: job.archived || false,
+                        createdAt: job.createdAt || new Date().toISOString(),
+                        updatedAt: job.updatedAt || job.createdAt || new Date().toISOString()
+                    }, { merge: true });
+                }
+
+                // Push Notes and convert base64 images to Storage URLs
+                for (const note of localNotes) {
+                    let imageUrl = note.image;
+
+                    if (imageUrl && imageUrl.startsWith('data:image')) {
+                        const storageRef = ref(storage, `notes_images/migrated_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`);
+                        await uploadString(storageRef, imageUrl, 'data_url');
+                        imageUrl = await getDownloadURL(storageRef);
+                    }
+
+                    await setDoc(doc(db, "notes", String(note.id)), {
+                        id: String(note.id),
+                        jobId: String(note.jobId),
+                        content: note.content || '',
+                        image: imageUrl || null,
+                        pinned: note.pinned || false,
+                        timestamp: note.timestamp || new Date().toISOString()
+                    }, { merge: true });
+                }
+
+                // Visual Success Feedback
+                btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> <span class="hidden sm:inline">Success!</span>';
+                btn.classList.replace('bg-amber-950/30', 'bg-emerald-950/50');
+                btn.classList.replace('border-amber-900/50', 'border-emerald-900/50');
+                btn.classList.replace('text-amber-500', 'text-emerald-400');
+                lucide.createIcons();
+                
+                alert("Migration Complete! Your old local data is now synced to the Firebase cloud.");
+
+            } catch (error) {
+                console.error("Migration Error:", error);
+                alert("Migration failed. Please check your console or network connection.");
+                btn.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4"></i> <span class="hidden sm:inline">Failed</span>';
+                lucide.createIcons();
+                btn.disabled = false;
+            }
+        }
+        window.migrateLocalDataToFirebase = migrateLocalDataToFirebase;
+
         // --- AI API CONFIG MANAGEMENT ---
         function toggleApiKeyModal() {
             const modal = document.getElementById('apiKeyModal');
@@ -354,7 +429,7 @@
             }
         }
 
-        // --- INTELLIGENT AI PARSER PIPELINE (Gemini SDK Client-Side Context Engine) ---
+        // --- INTELLIGENT AI PARSER PIPELINE (Hardened Client-Side Engine) ---
         async function processAILog() {
             const apiKey = localStorage.getItem('gemini_api_key');
             if (!apiKey) {
@@ -377,8 +452,8 @@
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
 
-                const systemPrompt = `You are a dedicated internal project management analyzer for Adem Atis at SimplyDoors. 
-Your responsibility is parsing text inputs (messy mobile speech-to-text dictations, client logs, or contact form emails arriving from the website).
+                const systemPrompt = `You are a dedicated internal project management analyzer for SimplyDoors. 
+Your responsibility is parsing messy text inputs (mobile dictations, client logs, or contact form emails).
 
 CRITICAL DOMAIN TERM DICTIONARY:
 - If text references "composite" threshold, lock rail, or item, rewrite it professionally as "bump/contractor threshold".
@@ -390,12 +465,33 @@ INSTRUCTIONS:
 1. Strip standard website auto-generated text or structural email headers.
 2. Isolate terms matching items to active records in our system registry.
 3. Apply technical terminology corrections dynamically.
-4. Output strict, valid, minified JSON array format ONLY. Never include markdown headers or text blocks outside the array block.
+4. Output strict, valid, minified JSON array format ONLY. Do NOT output conversational text.
 Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "content": "The formatted contextual update note."}]`;
 
                 const result = await model.generateContent(`${systemPrompt}\n\nRAW INPUT TEXT:\n${rawText}`);
-                const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-                const actions = JSON.parse(responseText);
+                let responseText = result.response.text();
+                
+                // Aggressive structural JSON extraction
+                const startIdx = responseText.indexOf('[');
+                const endIdx = responseText.lastIndexOf(']');
+                
+                if (startIdx !== -1 && endIdx !== -1) {
+                    responseText = responseText.substring(startIdx, endIdx + 1);
+                } else {
+                    throw new Error("The AI failed to format the response into a proper array block. It hallucinated text instead.");
+                }
+
+                // Hardened Error Catch for deeply malformed JSON
+                let actions;
+                try {
+                    actions = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error("The AI returned structurally invalid JSON data. Please submit via basic manual log or rephrase your text.");
+                }
+                
+                if (!Array.isArray(actions) || actions.length === 0 || !actions[0].jobId) {
+                     throw new Error("The AI successfully read the text, but could not confidently match it to any active jobs in your registry. Please select the job manually from the list.");
+                }
 
                 for (const action of actions) {
                     if (action.action === 'log_note' && action.jobId) {
@@ -422,11 +518,12 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
                 resetTextarea();
                 clearImage();
                 closeFastEntry();
-                if(actions.length > 0 && actions[0].jobId) openJobDetail(actions[0].jobId);
+                openJobDetail(actions[0].jobId);
 
             } catch (error) {
                 console.error("Contextual Engine Exception: ", error);
-                alert("AI Processing Failure. Verify endpoint key or submit via basic manual log.");
+                // Hardened error output - no more generic alerts.
+                alert(`AI EXECUTION FAILURE:\n\n${error.message}\n\nIf this says 'API key not valid' or 'API not enabled', please verify your Google Cloud Console settings and ensure your key doesn't have spaces at the end.`);
             } finally {
                 aiBtn.innerHTML = originalIcon;
                 aiBtn.disabled = false;
@@ -804,7 +901,7 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
         function timeAgo(dateString) { if(!dateString) return ''; const seconds = Math.floor((new Date() - new Date(dateString)) / 1000); let interval = seconds / 86400; if (interval > 1) return Math.floor(interval) + "d ago"; interval = seconds / 3600; if (interval > 1) return Math.floor(interval) + "h ago"; interval = seconds / 60; if (interval > 1) return Math.floor(interval) + "m ago"; return "Just now"; }
 
         // Global exposure bridge for layout modules
-        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog;
+        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog; window.migrateLocalDataToFirebase = migrateLocalDataToFirebase;
     </script>
 </body>
 </html>
