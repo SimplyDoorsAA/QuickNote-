@@ -42,13 +42,30 @@
 </head>
 <body class="h-screen flex flex-col overflow-hidden relative">
 
+    <!-- Hardcoded Security Overlay -->
+    <div id="securityOverlay" class="fixed inset-0 z-[100] bg-[#050505] flex flex-col items-center justify-center p-4 transition-opacity duration-300">
+        <div class="max-w-xs w-full panel-bg border border-subtle rounded-2xl p-8 flex flex-col items-center shadow-2xl">
+            <div class="w-14 h-14 bg-amber-950/30 border border-amber-900/50 rounded-full flex items-center justify-center mb-5">
+                <i data-lucide="lock" class="w-6 h-6 text-amber-500"></i>
+            </div>
+            <h2 class="text-xl font-bold text-white mb-2">Workspace Locked</h2>
+            <p class="text-xs text-neutral-400 text-center mb-8">Enter your authorization PIN to decrypt field network connection.</p>
+            <div class="w-full relative">
+                <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" class="w-full input-bg border border-subtle rounded-xl py-4 text-center text-3xl tracking-[0.5em] text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner font-mono" onkeyup="checkPin(event)">
+            </div>
+            <button onclick="validatePin()" class="w-full mt-5 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3.5 rounded-xl transition-colors shadow-md active:scale-95 flex justify-center items-center gap-2 tracking-wide">
+                Unlock <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="bg-[#0a0a0a] border-b border-subtle p-4 flex items-center justify-between shrink-0 z-40">
         <div class="flex items-center gap-4">
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v3.0 (Production)</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v3.1 (Secured)</span>
         </div>
         
         <div class="flex items-center gap-3">
@@ -282,7 +299,12 @@
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-        // Verified active database configuration
+        // ==========================================
+        // SECURITY DEFINITION
+        // ==========================================
+        const APP_PIN = "1234"; // CHANGE THIS 4-DIGIT NUMBER TO YOUR DESIRED PASSCODE
+        // ==========================================
+
         const firebaseConfig = {
             apiKey: "AIzaSyDR918XHKZd3oLFqCMnyrLBRmLe1TajH3E",
             authDomain: "simplydoors-notes.firebaseapp.com",
@@ -303,23 +325,60 @@
         let isMobileDetailView = false;
         let currentDashboardFilter = 'all';
 
-        // --- REAL-TIME DATABASE ENGINE SYNCHRONIZERS ---
-        onSnapshot(collection(db, "jobs"), (snapshot) => {
-            jobs = [];
-            snapshot.forEach((doc) => { jobs.push({ id: doc.id, ...doc.data() }); });
-            renderDashboard();
-            renderJobHeader();
-            if(!document.getElementById('fastEntryOverlay').classList.contains('hidden') && !document.getElementById('overlayStep1').classList.contains('hidden')) {
-                renderOverlayJobs(document.getElementById('overlayJobSearchInput').value);
+        // --- SECURITY & AUTHORIZATION LIFECYCLE ---
+        function checkPin(e) {
+            if (e.key === 'Enter' || e.target.value.length === 4) {
+                validatePin();
             }
-        });
+        }
 
-        onSnapshot(collection(db, "notes"), (snapshot) => {
-            notes = [];
-            snapshot.forEach((doc) => { notes.push({ id: doc.id, ...doc.data() }); });
-            renderDashboard();
-            if (currentOpenJobId) renderJobNotes();
-        });
+        function validatePin() {
+            const input = document.getElementById('pinInput');
+            if (input.value === APP_PIN) {
+                // Successful Unlock
+                sessionStorage.setItem('pm_session_unlocked', 'true');
+                const overlay = document.getElementById('securityOverlay');
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+                
+                // ONLY connect to the database after the user is authorized
+                initializeFirebaseListeners();
+            } else {
+                // Failed Unlock
+                input.value = '';
+                input.classList.add('border-red-500');
+                setTimeout(() => input.classList.remove('border-red-500'), 500);
+            }
+        }
+
+        // Check if session is already unlocked on page reload
+        if (sessionStorage.getItem('pm_session_unlocked') === 'true') {
+            document.getElementById('securityOverlay').classList.add('hidden');
+            initializeFirebaseListeners();
+        } else {
+            // Force focus on the PIN input if locked
+            setTimeout(() => document.getElementById('pinInput').focus(), 100);
+        }
+
+        // --- REAL-TIME DATABASE ENGINE SYNCHRONIZERS ---
+        function initializeFirebaseListeners() {
+            onSnapshot(collection(db, "jobs"), (snapshot) => {
+                jobs = [];
+                snapshot.forEach((doc) => { jobs.push({ id: doc.id, ...doc.data() }); });
+                renderDashboard();
+                renderJobHeader();
+                if(!document.getElementById('fastEntryOverlay').classList.contains('hidden') && !document.getElementById('overlayStep1').classList.contains('hidden')) {
+                    renderOverlayJobs(document.getElementById('overlayJobSearchInput').value);
+                }
+            });
+
+            onSnapshot(collection(db, "notes"), (snapshot) => {
+                notes = [];
+                snapshot.forEach((doc) => { notes.push({ id: doc.id, ...doc.data() }); });
+                renderDashboard();
+                if (currentOpenJobId) renderJobNotes();
+            });
+        }
 
         document.addEventListener('click', (e) => {
             const statusBtn = document.getElementById('detailJobStatus');
@@ -829,7 +888,7 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
         function timeAgo(dateString) { if(!dateString) return ''; const seconds = Math.floor((new Date() - new Date(dateString)) / 1000); let interval = seconds / 86400; if (interval > 1) return Math.floor(interval) + "d ago"; interval = seconds / 3600; if (interval > 1) return Math.floor(interval) + "h ago"; interval = seconds / 60; if (interval > 1) return Math.floor(interval) + "m ago"; return "Just now"; }
 
         // Global exposure bridge for layout modules
-        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog;
+        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog; window.checkPin = checkPin; window.validatePin = validatePin;
     </script>
 </body>
 </html>
