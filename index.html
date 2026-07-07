@@ -48,15 +48,13 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.5</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.7 (Live AI)</span>
         </div>
         
         <div class="flex items-center gap-3">
-            <!-- Data Migration Tool -->
             <button id="migrateDataBtn" onclick="migrateLocalDataToFirebase()" class="text-amber-500 hover:text-amber-400 transition-colors bg-amber-950/30 border border-amber-900/50 px-3 py-1.5 rounded-md shadow-sm text-xs font-bold flex items-center gap-1.5 mr-2">
                 <i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>
             </button>
-
             <button onclick="toggleApiKeyModal()" class="text-neutral-500 hover:text-amber-400 transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm" title="Configure AI">
                 <i data-lucide="cpu" class="w-4 h-4"></i>
             </button>
@@ -231,7 +229,7 @@
         <div class="panel-bg border border-subtle w-full max-w-md rounded-xl shadow-2xl flex flex-col p-6 space-y-4">
             <h3 class="font-bold text-white text-lg flex items-center gap-2"><i data-lucide="cpu" class="w-5 h-5 text-amber-500"></i> AI Configuration</h3>
             <p class="text-xs text-neutral-400 leading-relaxed">Enter your secure Google Gemini API key to activate natural field parsing. Your key stays entirely client-side inside your browser's private storage ecosystem.</p>
-            <input type="password" id="geminiApiKeyInput" placeholder="AIzaSy..." class="w-full input-bg border border-subtle rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors">
+            <input type="password" id="geminiApiKeyInput" placeholder="AQ.Ab8RN..." class="w-full input-bg border border-subtle rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors">
             <div class="flex justify-end gap-3 pt-2">
                 <button onclick="toggleApiKeyModal()" class="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white">Cancel</button>
                 <button onclick="saveApiKey()" class="px-5 py-2 bg-amber-500 text-black text-sm font-bold rounded-md hover:bg-amber-400 shadow-sm">Save Key</button>
@@ -449,7 +447,8 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(apiKey);
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                // CRITICAL FIX: Updated target model to the stable 2.5 architecture to bypass the 404 block
+                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
                 const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
 
                 const systemPrompt = `You are a dedicated internal project management analyzer for SimplyDoors. 
@@ -481,9 +480,15 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
                     throw new Error("The AI failed to format the response into a proper array block. It hallucinated text instead.");
                 }
 
-                const actions = JSON.parse(responseText);
+                // Hardened Error Catch for deeply malformed JSON
+                let actions;
+                try {
+                    actions = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error("The AI returned structurally invalid JSON data. Please submit via basic manual log or rephrase your text.");
+                }
                 
-                if (actions.length === 0 || !actions[0].jobId) {
+                if (!Array.isArray(actions) || actions.length === 0 || !actions[0].jobId) {
                      throw new Error("The AI successfully read the text, but could not confidently match it to any active jobs in your registry. Please select the job manually from the list.");
                 }
 
