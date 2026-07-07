@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Aggressive Cache Busters to prevent GitHub Pages from serving dead code -->
+    <!-- Aggressive Cache Busters -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -48,13 +48,10 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.7 (Live AI)</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v3.0 (Production)</span>
         </div>
         
         <div class="flex items-center gap-3">
-            <button id="migrateDataBtn" onclick="migrateLocalDataToFirebase()" class="text-amber-500 hover:text-amber-400 transition-colors bg-amber-950/30 border border-amber-900/50 px-3 py-1.5 rounded-md shadow-sm text-xs font-bold flex items-center gap-1.5 mr-2">
-                <i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>
-            </button>
             <button onclick="toggleApiKeyModal()" class="text-neutral-500 hover:text-amber-400 transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm" title="Configure AI">
                 <i data-lucide="cpu" class="w-4 h-4"></i>
             </button>
@@ -280,7 +277,6 @@
 
     <!-- Active Service Logic Module Execution Engine -->
     <script type="module">
-        // Direct, strict ESM loading explicitly designed to bypass iOS Safari's erratic Import Map failures
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -338,78 +334,6 @@
             }
         });
 
-        // --- NEW MIGRATION TOOL ---
-        async function migrateLocalDataToFirebase() {
-            const btn = document.getElementById('migrateDataBtn');
-            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> <span class="hidden sm:inline">Migrating...</span>';
-            lucide.createIcons();
-            btn.disabled = true;
-
-            try {
-                // Pull legacy data from device memory
-                const localJobs = JSON.parse(localStorage.getItem('pm_jobs')) || [];
-                const localNotes = JSON.parse(localStorage.getItem('pm_notes')) || [];
-
-                if(localJobs.length === 0 && localNotes.length === 0) {
-                    alert("No local data found on this address to migrate.");
-                    btn.innerHTML = '<i data-lucide="database-zap" class="w-4 h-4"></i> <span class="hidden sm:inline">Recover Old Data</span>';
-                    lucide.createIcons();
-                    btn.disabled = false;
-                    return;
-                }
-
-                // Push Jobs
-                for (const job of localJobs) {
-                    await setDoc(doc(db, "jobs", String(job.id)), {
-                        id: String(job.id),
-                        name: job.name,
-                        address: job.address || '',
-                        status: job.status,
-                        archived: job.archived || false,
-                        createdAt: job.createdAt || new Date().toISOString(),
-                        updatedAt: job.updatedAt || job.createdAt || new Date().toISOString()
-                    }, { merge: true });
-                }
-
-                // Push Notes and convert base64 images to Storage URLs
-                for (const note of localNotes) {
-                    let imageUrl = note.image;
-
-                    if (imageUrl && imageUrl.startsWith('data:image')) {
-                        const storageRef = ref(storage, `notes_images/migrated_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`);
-                        await uploadString(storageRef, imageUrl, 'data_url');
-                        imageUrl = await getDownloadURL(storageRef);
-                    }
-
-                    await setDoc(doc(db, "notes", String(note.id)), {
-                        id: String(note.id),
-                        jobId: String(note.jobId),
-                        content: note.content || '',
-                        image: imageUrl || null,
-                        pinned: note.pinned || false,
-                        timestamp: note.timestamp || new Date().toISOString()
-                    }, { merge: true });
-                }
-
-                // Visual Success Feedback
-                btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> <span class="hidden sm:inline">Success!</span>';
-                btn.classList.replace('bg-amber-950/30', 'bg-emerald-950/50');
-                btn.classList.replace('border-amber-900/50', 'border-emerald-900/50');
-                btn.classList.replace('text-amber-500', 'text-emerald-400');
-                lucide.createIcons();
-                
-                alert("Migration Complete! Your old local data is now synced to the Firebase cloud.");
-
-            } catch (error) {
-                console.error("Migration Error:", error);
-                alert("Migration failed. Please check your console or network connection.");
-                btn.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4"></i> <span class="hidden sm:inline">Failed</span>';
-                lucide.createIcons();
-                btn.disabled = false;
-            }
-        }
-        window.migrateLocalDataToFirebase = migrateLocalDataToFirebase;
-
         // --- AI API CONFIG MANAGEMENT ---
         function toggleApiKeyModal() {
             const modal = document.getElementById('apiKeyModal');
@@ -436,6 +360,15 @@
                 return;
             }
 
+            const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
+            
+            // Hard Stop: Prevent AI hallucination if no jobs exist to route to
+            if (simplifiedJobs.length === 0) {
+                alert("SYSTEM HALT: You must create at least one active Job Ticket before the AI can route your field notes.");
+                closeFastEntry();
+                return;
+            }
+
             const rawText = document.getElementById('quickNoteText').value.trim();
             if (!rawText) return alert("Please enter text or raw email context to pass to the processing pipeline.");
 
@@ -447,9 +380,7 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(apiKey);
-                // CRITICAL FIX: Updated target model to the stable 2.5 architecture to bypass the 404 block
                 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-                const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
 
                 const systemPrompt = `You are a dedicated internal project management analyzer for SimplyDoors. 
 Your responsibility is parsing messy text inputs (mobile dictations, client logs, or contact form emails).
@@ -480,7 +411,6 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
                     throw new Error("The AI failed to format the response into a proper array block. It hallucinated text instead.");
                 }
 
-                // Hardened Error Catch for deeply malformed JSON
                 let actions;
                 try {
                     actions = JSON.parse(responseText);
@@ -521,7 +451,6 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
 
             } catch (error) {
                 console.error("Contextual Engine Exception: ", error);
-                // Hardened error output - no more generic alerts.
                 alert(`AI EXECUTION FAILURE:\n\n${error.message}\n\nIf this says 'API key not valid' or 'API not enabled', please verify your Google Cloud Console settings and ensure your key doesn't have spaces at the end.`);
             } finally {
                 aiBtn.innerHTML = originalIcon;
@@ -612,7 +541,7 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
                 }, 1000);
             } catch (e) {
                 console.error("Storage Matrix Sync Fault: ", e);
-                alert("Cloud transactional write rejected.");
+                alert("Cloud transactional write rejected. Your test-mode database rules may have expired.");
                 btn.disabled = false;
             }
         }
@@ -900,7 +829,7 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
         function timeAgo(dateString) { if(!dateString) return ''; const seconds = Math.floor((new Date() - new Date(dateString)) / 1000); let interval = seconds / 86400; if (interval > 1) return Math.floor(interval) + "d ago"; interval = seconds / 3600; if (interval > 1) return Math.floor(interval) + "h ago"; interval = seconds / 60; if (interval > 1) return Math.floor(interval) + "m ago"; return "Just now"; }
 
         // Global exposure bridge for layout modules
-        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog; window.migrateLocalDataToFirebase = migrateLocalDataToFirebase;
+        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog;
     </script>
 </body>
 </html>
