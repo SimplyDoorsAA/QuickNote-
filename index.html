@@ -65,7 +65,7 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v3.1 (Secured)</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v4.0 (AI Vision + Structured Output)</span>
         </div>
         
         <div class="flex items-center gap-3">
@@ -335,28 +335,22 @@
         function validatePin() {
             const input = document.getElementById('pinInput');
             if (input.value === APP_PIN) {
-                // Successful Unlock
                 sessionStorage.setItem('pm_session_unlocked', 'true');
                 const overlay = document.getElementById('securityOverlay');
                 overlay.classList.add('opacity-0', 'pointer-events-none');
                 setTimeout(() => overlay.classList.add('hidden'), 300);
-                
-                // ONLY connect to the database after the user is authorized
                 initializeFirebaseListeners();
             } else {
-                // Failed Unlock
                 input.value = '';
                 input.classList.add('border-red-500');
                 setTimeout(() => input.classList.remove('border-red-500'), 500);
             }
         }
 
-        // Check if session is already unlocked on page reload
         if (sessionStorage.getItem('pm_session_unlocked') === 'true') {
             document.getElementById('securityOverlay').classList.add('hidden');
             initializeFirebaseListeners();
         } else {
-            // Force focus on the PIN input if locked
             setTimeout(() => document.getElementById('pinInput').focus(), 100);
         }
 
@@ -410,7 +404,7 @@
             }
         }
 
-        // --- INTELLIGENT AI PARSER PIPELINE (Hardened Client-Side Engine) ---
+        // --- INTELLIGENT AI PARSER PIPELINE (Vision + Structured Output Engine) ---
         async function processAILog() {
             const apiKey = localStorage.getItem('gemini_api_key');
             if (!apiKey) {
@@ -421,7 +415,6 @@
 
             const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
             
-            // Hard Stop: Prevent AI hallucination if no jobs exist to route to
             if (simplifiedJobs.length === 0) {
                 alert("SYSTEM HALT: You must create at least one active Job Ticket before the AI can route your field notes.");
                 closeFastEntry();
@@ -429,7 +422,12 @@
             }
 
             const rawText = document.getElementById('quickNoteText').value.trim();
-            if (!rawText) return alert("Please enter text or raw email context to pass to the processing pipeline.");
+            if (!rawText && !pendingImageData) {
+                return alert("Please enter text, paste an email, or provide a field image to process.");
+            }
+
+            const currentTargetId = document.getElementById('quickNoteJobId').value;
+            const currentTargetName = document.getElementById('overlaySelectedJobName').innerText;
 
             const aiBtn = document.getElementById('aiLogBtn');
             const originalIcon = aiBtn.innerHTML;
@@ -439,74 +437,101 @@
 
             try {
                 const genAI = new GoogleGenerativeAI(apiKey);
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                
+                // CRITICAL UPGRADE: Forcing the SDK to return mathematical JSON natively.
+                const model = genAI.getGenerativeModel({ 
+                    model: "gemini-2.5-flash",
+                    generationConfig: {
+                        responseMimeType: "application/json"
+                    }
+                });
+
+                const targetInstruction = currentTargetId 
+                    ? `\nCRITICAL ROUTING: The user has already selected the job "${currentTargetName}" (ID: ${currentTargetId}). You MUST use this jobId in your JSON output unless the prompt explicitly dictates a different active job.`
+                    : "";
 
                 const systemPrompt = `You are a dedicated internal project management analyzer for SimplyDoors. 
-Your responsibility is parsing messy text inputs (mobile dictations, client logs, or contact form emails).
+Your responsibility is parsing messy text inputs, mobile dictations, and analyzing field images.
 
 CRITICAL DOMAIN TERM DICTIONARY:
-- If text references "composite" threshold, lock rail, or item, rewrite it professionally as "bump/contractor threshold".
-- If text references "standard door" or "generic panel design", resolve it to "8 panel steel" door configuration.
+- If visual/text references "composite" threshold, rewrite as "bump/contractor threshold".
+- If visual/text references "standard door", resolve to "8 panel steel" door.
 
 ACTIVE INSTANCE REGISTRY LIST: ${JSON.stringify(simplifiedJobs)}
+${targetInstruction}
 
 INSTRUCTIONS:
 1. Strip standard website auto-generated text or structural email headers.
-2. Isolate terms matching items to active records in our system registry.
-3. Apply technical terminology corrections dynamically.
-4. Output strict, valid, minified JSON array format ONLY. Do NOT output conversational text.
-Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "content": "The formatted contextual update note."}]`;
+2. If an image is provided, analyze it. Extract quantities, materials, configurations, and visible site hurdles. Incorporate these visual observations into your summary.
+3. Isolate terms matching items to active records in our system registry.
+4. Your output MUST be a strict, valid JSON array. 
+Data Structure: [{"action": "log_note", "jobId": "the-matched-id", "content": "The formatted contextual update note, including all visual findings and text data."}]`;
 
-                const result = await model.generateContent(`${systemPrompt}\n\nRAW INPUT TEXT:\n${rawText}`);
-                let responseText = result.response.text();
-                
-                // Aggressive structural JSON extraction
-                const startIdx = responseText.indexOf('[');
-                const endIdx = responseText.lastIndexOf(']');
-                
-                if (startIdx !== -1 && endIdx !== -1) {
-                    responseText = responseText.substring(startIdx, endIdx + 1);
-                } else {
-                    throw new Error("The AI failed to format the response into a proper array block. It hallucinated text instead.");
+                // CRITICAL UPGRADE: Multi-Modal Parts Array
+                const promptParts = [
+                    systemPrompt,
+                    "\n\nRAW USER INPUT TEXT:\n" + (rawText || "(No text provided. Rely entirely on the image analysis.)")
+                ];
+
+                if (pendingImageData) {
+                    // Strip the base64 prefix so Gemini can read the raw binary data
+                    const base64Data = pendingImageData.split(',')[1];
+                    promptParts.push({
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: "image/jpeg"
+                        }
+                    });
                 }
 
+                // Send the multi-modal array to the model
+                const result = await model.generateContent(promptParts);
+                
+                // Because of responseMimeType, we don't need regex. We just parse it.
                 let actions;
                 try {
-                    actions = JSON.parse(responseText);
+                    actions = JSON.parse(result.response.text());
                 } catch (parseError) {
-                    throw new Error("The AI returned structurally invalid JSON data. Please submit via basic manual log or rephrase your text.");
+                    throw new Error("The AI failed to lock its output to the forced JSON schema. Please retry.");
                 }
                 
-                if (!Array.isArray(actions) || actions.length === 0 || !actions[0].jobId) {
-                     throw new Error("The AI successfully read the text, but could not confidently match it to any active jobs in your registry. Please select the job manually from the list.");
+                if (!Array.isArray(actions) || actions.length === 0) {
+                     throw new Error("The AI successfully read the data, but returned an empty structural action array.");
                 }
 
                 for (const action of actions) {
-                    if (action.action === 'log_note' && action.jobId) {
-                        let imageUrl = null;
-                        if (pendingImageData) {
-                            const storageRef = ref(storage, `notes_images/${Date.now()}_field_asset.jpg`);
-                            await uploadString(storageRef, pendingImageData, 'data_url');
-                            imageUrl = await getDownloadURL(storageRef);
-                        }
+                    const finalJobId = action.jobId || currentTargetId;
 
-                        const noteRef = doc(collection(db, "notes"));
-                        await setDoc(noteRef, {
-                            id: noteRef.id,
-                            jobId: action.jobId,
-                            content: action.content,
-                            image: imageUrl,
-                            pinned: false,
-                            timestamp: new Date().toISOString()
-                        });
-                        await updateDoc(doc(db, "jobs", action.jobId), { updatedAt: new Date().toISOString() });
+                    if (!finalJobId) {
+                         throw new Error("The AI successfully formatted the data, but could not match it to any active jobs. Please select the job manually from the list.");
                     }
+
+                    // Push the image to Firebase Storage so it isn't lost
+                    let imageUrl = null;
+                    if (pendingImageData) {
+                        const storageRef = ref(storage, `notes_images/${Date.now()}_field_asset.jpg`);
+                        await uploadString(storageRef, pendingImageData, 'data_url');
+                        imageUrl = await getDownloadURL(storageRef);
+                    }
+
+                    const noteRef = doc(collection(db, "notes"));
+                    await setDoc(noteRef, {
+                        id: noteRef.id,
+                        jobId: finalJobId,
+                        content: action.content || rawText || "Analyzed Visual Data Logged.",
+                        image: imageUrl,
+                        pinned: false,
+                        timestamp: new Date().toISOString()
+                    });
+                    await updateDoc(doc(db, "jobs", finalJobId), { updatedAt: new Date().toISOString() });
                 }
 
                 resetTextarea();
                 clearImage();
                 closeFastEntry();
-                openJobDetail(actions[0].jobId);
+                
+                const destinationJob = actions[0].jobId || currentTargetId;
+                if(destinationJob) openJobDetail(destinationJob);
 
             } catch (error) {
                 console.error("Contextual Engine Exception: ", error);
@@ -861,12 +886,12 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
             container.innerHTML = resultsHTML; lucide.createIcons();
         }
 
-        async function deleteNote(event, noteId) { event.stopPropagation(); if(confirm('Permanently wipe this structural log parameter?')) { try { await deleteDoc(doc(db, "notes", noteId)); } catch(e) {} } }
-        async function togglePin(event, noteId) { event.stopPropagation(); const note = notes.find(n => String(n.id) === String(noteId)); if (note) { try { await updateDoc(doc(db, "notes", noteId), { pinned: !note.pinned }); } catch(e) {} } }
-        async function saveEdit(noteId) { const textarea = document.getElementById(`edit-textarea-${noteId}`); try { await updateDoc(doc(db, "notes", noteId), { content: textarea.value.trim() }); } catch(e) {} }
-        async function quickArchiveJob(jobId) { if(confirm('Archive this ticket instance?')) { try { await updateDoc(doc(db, "jobs", jobId), { archived: true }); if(currentOpenJobId === jobId) { currentOpenJobId = null; document.getElementById('jobDetailHeader').classList.add('hidden'); document.getElementById('jobNotesFeed').classList.add('hidden'); document.getElementById('emptyDetailState').classList.remove('hidden'); if (window.innerWidth < 768) toggleMobileView(); } } catch(e) {} } }
-        async function updateJobStatusQuick(jobId) { const job = jobs.find(j => String(j.id) === String(jobId)); if (job) { const flow = ['contacted', 'estimating', 'quoted', 'done', 'completed']; let nextIdx = flow.indexOf(job.status) + 1; if(nextIdx >= flow.length) nextIdx = 0; try { await updateDoc(doc(db, "jobs", jobId), { status: flow[nextIdx], updatedAt: new Date().toISOString() }); const card = document.getElementById('swipe-card-' + jobId); if(card) card.style.transform = 'translateX(0)'; } catch(e) {} } }
-        async function updateJobStatus(newStatus) { if (!currentOpenJobId) return; try { await updateDoc(doc(db, "jobs", currentOpenJobId), { status: newStatus, updatedAt: new Date().toISOString() }); document.getElementById('statusUpdateMenu').classList.add('hidden'); } catch (e) {} }
+        async function deleteNote(event, noteId) { event.stopPropagation(); if(confirm('Permanently wipe this structural log parameter?')) { try { await deleteDoc(doc(db, "notes", noteId)); } catch(e) { console.error(e); } } }
+        async function togglePin(event, noteId) { event.stopPropagation(); const note = notes.find(n => String(n.id) === String(noteId)); if (note) { try { await updateDoc(doc(db, "notes", noteId), { pinned: !note.pinned }); } catch(e) { console.error(e); } } }
+        async function saveEdit(noteId) { const textarea = document.getElementById(`edit-textarea-${noteId}`); try { await updateDoc(doc(db, "notes", noteId), { content: textarea.value.trim() }); } catch(e) { console.error(e); } }
+        async function quickArchiveJob(jobId) { if(confirm('Archive this ticket instance?')) { try { await updateDoc(doc(db, "jobs", jobId), { archived: true }); if(currentOpenJobId === jobId) { currentOpenJobId = null; document.getElementById('jobDetailHeader').classList.add('hidden'); document.getElementById('jobNotesFeed').classList.add('hidden'); document.getElementById('emptyDetailState').classList.remove('hidden'); if (window.innerWidth < 768) toggleMobileView(); } } catch(e) { console.error(e); } } }
+        async function updateJobStatusQuick(jobId) { const job = jobs.find(j => String(j.id) === String(jobId)); if (job) { const flow = ['contacted', 'estimating', 'quoted', 'done', 'completed']; let nextIdx = flow.indexOf(job.status) + 1; if(nextIdx >= flow.length) nextIdx = 0; try { await updateDoc(doc(db, "jobs", jobId), { status: flow[nextIdx], updatedAt: new Date().toISOString() }); const card = document.getElementById('swipe-card-' + jobId); if(card) card.style.transform = 'translateX(0)'; } catch(e) { console.error(e); } } }
+        async function updateJobStatus(newStatus) { if (!currentOpenJobId) return; try { await updateDoc(doc(db, "jobs", currentOpenJobId), { status: newStatus, updatedAt: new Date().toISOString() }); document.getElementById('statusUpdateMenu').classList.add('hidden'); } catch (e) { console.error(e); } }
 
         function toggleGlobalSearch() { const overlay = document.getElementById('globalSearchOverlay'); overlay.classList.toggle('hidden'); if(!overlay.classList.contains('hidden')){ document.getElementById('globalSearchInput').focus(); executeGlobalSearch(''); } }
         function setDashboardFilter(status) { currentDashboardFilter = status; document.querySelectorAll('.filter-btn').forEach(btn => { btn.className = 'filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white'; }); document.getElementById(`flt-${status}`).className = 'filter-btn bg-neutral-800 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-neutral-600 whitespace-nowrap shrink-0 transition-colors'; renderDashboard(); }
