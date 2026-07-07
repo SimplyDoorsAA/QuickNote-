@@ -48,7 +48,7 @@
             <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
                 <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
             </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.6 (Production Master)</span>
+            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v2.5</span>
         </div>
         
         <div class="flex items-center gap-3">
@@ -481,15 +481,9 @@ Format Specification: [{"action": "log_note", "jobId": "the-matched-id", "conten
                     throw new Error("The AI failed to format the response into a proper array block. It hallucinated text instead.");
                 }
 
-                // Hardened Error Catch for deeply malformed JSON
-                let actions;
-                try {
-                    actions = JSON.parse(responseText);
-                } catch (parseError) {
-                    throw new Error("The AI returned structurally invalid JSON data. Please submit via basic manual log or rephrase your text.");
-                }
+                const actions = JSON.parse(responseText);
                 
-                if (!Array.isArray(actions) || actions.length === 0 || !actions[0].jobId) {
+                if (actions.length === 0 || !actions[0].jobId) {
                      throw new Error("The AI successfully read the text, but could not confidently match it to any active jobs in your registry. Please select the job manually from the list.");
                 }
 
