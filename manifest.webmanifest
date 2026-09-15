@@ -1,0 +1,19 @@
+{
+  "name": "QuickNote",
+  "short_name": "QuickNote",
+  "description": "Fast personal note capture with Gmail context",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
