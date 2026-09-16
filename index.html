@@ -1,919 +1,150 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Aggressive Cache Busters -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>PM Field Notes</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        body {
-            background-color: #050505;
-            color: #e5e5e5;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
-        
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .panel-bg { background-color: #121212; }
-        .input-bg { background-color: #1a1a1a; }
-        .border-subtle { border-color: #262626; }
-        
-        .status-contacted { border-left-color: #737373 !important; } 
-        .status-estimating { border-left-color: #3b82f6 !important; } 
-        .status-quoted { border-left-color: #f59e0b !important; } 
-        .status-done { border-left-color: #10b981 !important; } 
-        .status-completed { border-left-color: #8b5cf6 !important; } 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>QuickNote</title>
 
-        .swipe-card { transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
-        .pinned-note { border-color: #525252; background: linear-gradient(180deg, #18181b 0%, #121212 100%); }
-    </style>
+<!-- PWA / iOS home-screen install -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#050505">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="QuickNote">
+<link rel="apple-touch-icon" href="icon.svg">
+<!--
+  NOTE: iOS's home-screen icon support for SVG apple-touch-icon is
+  inconsistent across versions. If the icon doesn't show up after
+  Add to Home Screen, swap icon.svg for a real 180x180 PNG here -
+  cosmetic only, does not block anything else in the app.
+-->
+
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body {
+    background-color: #050505;
+    color: #e5e5e5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
+  .panel-bg { background-color: #121212; }
+  .input-bg { background-color: #1a1a1a; }
+  .border-subtle { border-color: #262626; }
+  textarea { field-sizing: content; }
+  [hidden] { display: none !important; }
+  .status-dot { width: 8px; height: 8px; border-radius: 9999px; }
+  .status-dot.online { background: #10b981; }
+  .status-dot.offline { background: #737373; }
+  .status-dot.pending { background: #f59e0b; }
+</style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden relative">
 
-    <!-- Hardcoded Security Overlay -->
-    <div id="securityOverlay" class="fixed inset-0 z-[100] bg-[#050505] flex flex-col items-center justify-center p-4 transition-opacity duration-300">
-        <div class="max-w-xs w-full panel-bg border border-subtle rounded-2xl p-8 flex flex-col items-center shadow-2xl">
-            <div class="w-14 h-14 bg-amber-950/30 border border-amber-900/50 rounded-full flex items-center justify-center mb-5">
-                <i data-lucide="lock" class="w-6 h-6 text-amber-500"></i>
-            </div>
-            <h2 class="text-xl font-bold text-white mb-2">Workspace Locked</h2>
-            <p class="text-xs text-neutral-400 text-center mb-8">Enter your authorization PIN to decrypt field network connection.</p>
-            <div class="w-full relative">
-                <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" class="w-full input-bg border border-subtle rounded-xl py-4 text-center text-3xl tracking-[0.5em] text-white focus:outline-none focus:border-amber-500 transition-colors shadow-inner font-mono" onkeyup="checkPin(event)">
-            </div>
-            <button onclick="validatePin()" class="w-full mt-5 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3.5 rounded-xl transition-colors shadow-md active:scale-95 flex justify-center items-center gap-2 tracking-wide">
-                Unlock <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </button>
-        </div>
+  <!-- ============ HEADER ============ -->
+  <header class="shrink-0 flex items-center justify-between px-4 py-3 border-b border-subtle panel-bg">
+    <div class="flex items-center gap-2">
+      <h1 class="text-base font-bold text-white">QuickNote</h1>
+      <span id="connStatus" class="status-dot offline" title="Offline"></span>
+      <span id="pendingBadge" hidden class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/50 text-amber-400 border border-amber-900/50"></span>
     </div>
-
-    <!-- Header -->
-    <header class="bg-[#0a0a0a] border-b border-subtle p-4 flex items-center justify-between shrink-0 z-40">
-        <div class="flex items-center gap-4">
-            <h1 class="text-lg font-semibold tracking-tight text-white flex items-center gap-2">
-                <i data-lucide="hard-hat" class="w-5 h-5 text-neutral-400"></i> Field Notes
-            </h1>
-            <span class="text-[10px] font-mono text-neutral-600 border border-[#262626] bg-[#121212] px-2 py-0.5 rounded-sm uppercase tracking-widest hidden md:inline-block">Build v4.0 (AI Vision + Structured Output)</span>
-        </div>
-        
-        <div class="flex items-center gap-3">
-            <button onclick="toggleApiKeyModal()" class="text-neutral-500 hover:text-amber-400 transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm" title="Configure AI">
-                <i data-lucide="cpu" class="w-4 h-4"></i>
-            </button>
-            <button onclick="toggleGlobalSearch()" class="text-neutral-400 hover:text-white transition-colors bg-[#1a1a1a] border border-subtle p-2 rounded-full shadow-sm">
-                <i data-lucide="search" class="w-4 h-4"></i>
-            </button>
-            <button onclick="toggleMobileView()" class="md:hidden text-sm font-medium text-neutral-400 hover:text-white transition-colors" id="mobileToggleBtn">
-                View Job Details
-            </button>
-        </div>
-    </header>
-
-    <!-- Global Search Overlay -->
-    <div id="globalSearchOverlay" class="hidden absolute top-[70px] left-0 w-full z-50 p-4">
-        <div class="max-w-2xl mx-auto panel-bg border border-subtle rounded-xl shadow-2xl overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-subtle flex items-center gap-3 bg-[#0a0a0a]">
-                <i data-lucide="search" class="w-5 h-5 text-neutral-500 shrink-0"></i>
-                <input type="text" id="globalSearchInput" placeholder="Search all jobs, notes, specs, and addresses..." class="flex-1 bg-transparent text-sm text-white focus:outline-none placeholder-neutral-600" oninput="executeGlobalSearch(this.value)">
-                <button onclick="toggleGlobalSearch()" class="text-neutral-500 hover:text-white shrink-0"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <div id="globalSearchResults" class="max-h-80 overflow-y-auto custom-scrollbar p-2 hidden flex-col gap-1"></div>
-        </div>
-    </div>
-
-    <!-- Main Workspace -->
-    <main class="flex-1 w-full flex flex-col md:flex-row overflow-hidden relative">
-        
-        <!-- Left Panel: Ticket Feed -->
-        <div id="leftPanel" class="w-full md:w-[400px] lg:w-[450px] flex flex-col border-r border-subtle h-full absolute md:relative z-30 bg-[#050505] transition-transform duration-300">
-            
-            <div class="p-4 border-b border-subtle shrink-0 space-y-4 bg-[#050505]">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-sm font-semibold text-neutral-400 uppercase tracking-wider">Active Tickets</h2>
-                    <div class="flex items-center gap-2">
-                        <button onclick="openFastEntry()" class="hidden md:flex text-xs bg-emerald-950 hover:bg-emerald-900 text-emerald-400 px-3 py-1.5 rounded-md items-center gap-1.5 transition-colors border border-emerald-900 font-bold shadow-sm">
-                            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Log Update
-                        </button>
-                        <button onclick="openNewJobModal()" class="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors border border-subtle font-medium shadow-sm">
-                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> New Ticket
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1">
-                    <button onclick="setDashboardFilter('all')" id="flt-all" class="filter-btn bg-neutral-800 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-neutral-600 whitespace-nowrap shrink-0 transition-colors">All</button>
-                    <button onclick="setDashboardFilter('contacted')" id="flt-contacted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Contacted</button>
-                    <button onclick="setDashboardFilter('estimating')" id="flt-estimating" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Estimating</button>
-                    <button onclick="setDashboardFilter('quoted')" id="flt-quoted" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Quoted</button>
-                    <button onclick="setDashboardFilter('done')" id="flt-done" class="filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white">Done</button>
-                </div>
-            </div>
-            
-            <div id="jobListContainer" class="p-4 space-y-3 flex-1 overflow-y-auto pr-3 custom-scrollbar overflow-x-hidden">
-                <!-- Injected via Real-time Snapshot -->
-            </div>
-        </div>
-
-        <!-- Right Panel: Job Detail View -->
-        <div id="rightPanel" class="w-full md:flex-1 h-full bg-[#050505] absolute md:relative z-10 hidden md:flex flex-col translate-x-full md:translate-x-0 transition-transform duration-300">
-            
-            <div id="jobDetailHeader" class="panel-bg border-b border-subtle p-4 flex items-center gap-4 shrink-0 hidden z-20">
-                <button onclick="toggleMobileView()" class="md:hidden text-neutral-400 hover:text-white p-2 -ml-2 rounded-lg transition-colors">
-                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
-                </button>
-                <div class="flex-1">
-                    <div class="flex flex-wrap items-center gap-3 mb-1">
-                        <h2 id="detailJobName" class="text-lg font-bold text-white leading-tight"></h2>
-                        <div class="relative">
-                            <button id="detailJobStatus" onclick="toggleStatusMenu(event)" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-sm flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
-                                <span id="detailJobStatusText"></span> <i data-lucide="chevron-down" class="w-3 h-3"></i>
-                            </button>
-                            <div id="statusUpdateMenu" class="hidden absolute top-full left-0 mt-2 w-40 bg-[#121212] border border-subtle rounded-md shadow-2xl overflow-hidden py-1">
-                                <button onclick="updateJobStatus('contacted')" class="w-full text-left px-4 py-2 text-xs text-neutral-300 hover:bg-[#1a1a1a] hover:text-white font-semibold">Contacted</button>
-                                <button onclick="updateJobStatus('estimating')" class="w-full text-left px-4 py-2 text-xs text-blue-400 hover:bg-[#1a1a1a] hover:text-blue-300 font-semibold">Estimating</button>
-                                <button onclick="updateJobStatus('quoted')" class="w-full text-left px-4 py-2 text-xs text-amber-500 hover:bg-[#1a1a1a] hover:text-amber-400 font-semibold">Quoted</button>
-                                <button onclick="updateJobStatus('done')" class="w-full text-left px-4 py-2 text-xs text-emerald-500 hover:bg-[#1a1a1a] hover:text-emerald-400 font-semibold">Done</button>
-                                <button onclick="updateJobStatus('completed')" class="w-full text-left px-4 py-2 text-xs text-purple-400 hover:bg-[#1a1a1a] hover:text-purple-300 font-semibold">Completed</button>
-                            </div>
-                        </div>
-                    </div>
-                    <a id="detailJobAddress" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 w-fit transition-colors"></a>
-                </div>
-                <button onclick="archiveCurrentJob()" class="text-xs font-medium text-neutral-400 hover:text-white border border-subtle bg-input-bg px-3 py-2 rounded-md flex items-center gap-1.5 transition-colors shadow-sm">
-                    <i data-lucide="archive" class="w-3.5 h-3.5"></i> Archive
-                </button>
-            </div>
-
-            <!-- Empty State -->
-            <div id="emptyDetailState" class="flex-1 flex flex-col items-center justify-center text-neutral-600">
-                <i data-lucide="clipboard-list" class="w-12 h-12 mb-3 opacity-20"></i>
-                <p class="text-sm">Select a job ticket to view details.</p>
-            </div>
-
-            <div class="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-5 hidden" id="jobNotesFeed">
-                <!-- Notes Injected via Live Sync -->
-            </div>
-        </div>
-    </main>
-
-    <!-- Mobile Floating Action Button -->
-    <button onclick="openFastEntry()" class="md:hidden fixed bottom-6 right-6 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-5 py-4 rounded-full shadow-2xl z-40 flex items-center gap-2 active:scale-95 transition-transform tracking-wide">
-        <i data-lucide="plus-circle" class="w-5 h-5"></i> Log Update
+    <button id="openSettingsBtn" class="text-neutral-400 hover:text-white p-1" aria-label="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+  </header>
 
-    <!-- Fast Entry Full-Screen Overlay Component -->
-    <div id="fastEntryOverlay" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex-col p-4 md:p-8 overflow-y-auto">
-        <div class="flex justify-between items-center mb-6 shrink-0 max-w-2xl mx-auto w-full">
-            <button id="overlayBackButton" onclick="goBackToStep1()" class="hidden text-neutral-400 hover:text-white flex items-center gap-1 text-sm font-semibold py-1 px-3 bg-neutral-900 border border-subtle rounded-lg transition-colors">
-                <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
-            </button>
-            <div id="overlayTitle" class="text-xs font-mono uppercase tracking-widest text-neutral-500 font-bold">Step 1: Select Project</div>
-            <button onclick="closeFastEntry()" class="text-neutral-400 hover:text-white p-2 bg-neutral-900 border border-subtle rounded-full ml-auto transition-colors">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-        </div>
+  <!-- ============ MAIN: capture + list ============ -->
+  <main class="flex-1 overflow-y-auto">
 
-        <!-- Step 1: Destination Selection -->
-        <div id="overlayStep1" class="flex-1 max-w-2xl mx-auto w-full flex flex-col min-h-0">
-            <div class="relative mb-5 shrink-0">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i data-lucide="search" class="w-4 h-4 text-neutral-500"></i>
-                </div>
-                <input type="text" id="overlayJobSearchInput" oninput="renderOverlayJobs(this.value)" placeholder="Search active projects to log to..." class="w-full input-bg border border-subtle rounded-xl py-3.5 pl-10 pr-4 text-sm focus:outline-none focus:border-neutral-500 text-white font-medium shadow-inner">
-            </div>
-            <div id="overlayJobList" class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 pb-4">
-                <!-- Populated dynamically -->
-            </div>
-        </div>
+    <!-- Capture card -->
+    <section class="p-4 border-b border-subtle">
+      <div class="relative mb-2">
+        <input id="personSearchInput" type="text" placeholder="Who is this about? (name or number)"
+          class="w-full input-bg border border-subtle rounded-lg px-3 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500"
+          autocomplete="off">
+        <div id="personResults" hidden
+          class="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto panel-bg border border-subtle rounded-lg shadow-xl"></div>
+      </div>
 
-        <!-- Step 2: Content Canvas Input Screen -->
-        <div id="overlayStep2" class="hidden flex-1 max-w-2xl mx-auto w-full flex flex-col min-h-0 gap-4">
-            <div class="panel-bg border border-subtle rounded-xl p-4 flex items-center justify-between shrink-0 shadow-md">
-                <div class="truncate pr-2">
-                    <span class="text-[9px] font-bold uppercase tracking-widest text-emerald-400 block mb-0.5">Logging Cloud Update To:</span>
-                    <h3 id="overlaySelectedJobName" class="text-base font-extrabold text-white truncate"></h3>
-                </div>
-                <span id="overlaySelectedJobAddress" class="text-xs text-neutral-500 truncate max-w-[180px] hidden sm:inline"></span>
-            </div>
+      <div id="selectedPersonChip" hidden class="mb-2 inline-flex items-center gap-2 bg-neutral-800 rounded-full pl-3 pr-1 py-1 text-xs text-white">
+        <span id="selectedPersonName"></span>
+        <button id="clearPersonBtn" class="w-5 h-5 flex items-center justify-center rounded-full hover:bg-neutral-700" aria-label="Clear">&times;</button>
+      </div>
 
-            <textarea id="quickNoteText" oninput="autoExpand(this)" placeholder="Type, paste a raw web email form, or dictate field observations here..." class="flex-1 w-full input-bg border border-subtle rounded-xl p-4 text-base md:text-lg text-white focus:outline-none focus:border-neutral-500 transition-colors resize-none shadow-inner overflow-y-auto leading-relaxed" rows="4"></textarea>
-            
-            <input type="hidden" id="quickNoteJobId">
+      <textarea id="noteText" rows="3" placeholder="Type, or tap the mic on your keyboard to dictate…"
+        class="w-full input-bg border border-subtle rounded-lg px-3 py-2.5 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-neutral-500 resize-none"></textarea>
 
-            <!-- Hardware Image Capture Preview Container -->
-            <div id="imagePreviewContainer" class="hidden relative w-full h-40 rounded-xl border border-subtle bg-black overflow-hidden flex items-center justify-center shrink-0 shadow-lg">
-                <img id="imagePreview" src="" class="max-w-full max-h-full object-contain">
-                <button onclick="clearImage()" class="absolute top-3 right-3 bg-black/80 p-2 rounded-lg text-white hover:text-red-400 backdrop-blur-sm transition-colors">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
+      <button id="saveNoteBtn" disabled
+        class="mt-2 w-full bg-white text-black text-sm font-bold py-2.5 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.99] transition-transform">
+        Save Note
+      </button>
+    </section>
 
-            <div class="flex gap-3 items-center justify-between shrink-0 pb-6">
-                <label class="p-4 input-bg border border-subtle rounded-xl text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors cursor-pointer inline-block shadow-md active:scale-95">
-                    <i data-lucide="camera" class="w-6 h-6"></i>
-                    <input type="file" accept="image/*" capture="environment" class="hidden" id="cameraInput" onchange="handleImageSelection(event)">
-                </label>
-                
-                <!-- AI Smart Routing Engine Trigger -->
-                <button id="aiLogBtn" onclick="processAILog()" class="p-4 bg-amber-950 border border-amber-900 text-amber-500 hover:text-amber-400 hover:bg-amber-900 rounded-xl font-bold transition-all shadow-md active:scale-95 flex items-center gap-2" title="Let AI parse, structural clean, and route this entry">
-                    <i data-lucide="sparkles" class="w-6 h-6"></i>
-                </button>
+    <!-- Notes list -->
+    <section id="notesList" class="p-4 space-y-2"></section>
 
-                <button id="submitNoteBtn" onclick="submitQuickNote()" class="flex-1 bg-white hover:bg-neutral-200 text-black py-4 rounded-xl text-base font-bold transition-all shadow-xl active:scale-[0.99] tracking-wide">
-                    Save Cloud Log
-                </button>
-            </div>
-        </div>
+    <div id="emptyState" class="p-8 text-center text-neutral-500 text-sm">
+      No notes yet. Pick who this is about and start typing.
     </div>
+  </main>
 
-    <!-- Client-Side Gemini Configuration UI Modal -->
-    <div id="apiKeyModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-        <div class="panel-bg border border-subtle w-full max-w-md rounded-xl shadow-2xl flex flex-col p-6 space-y-4">
-            <h3 class="font-bold text-white text-lg flex items-center gap-2"><i data-lucide="cpu" class="w-5 h-5 text-amber-500"></i> AI Configuration</h3>
-            <p class="text-xs text-neutral-400 leading-relaxed">Enter your secure Google Gemini API key to activate natural field parsing. Your key stays entirely client-side inside your browser's private storage ecosystem.</p>
-            <input type="password" id="geminiApiKeyInput" placeholder="AQ.Ab8RN..." class="w-full input-bg border border-subtle rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition-colors">
-            <div class="flex justify-end gap-3 pt-2">
-                <button onclick="toggleApiKeyModal()" class="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white">Cancel</button>
-                <button onclick="saveApiKey()" class="px-5 py-2 bg-amber-500 text-black text-sm font-bold rounded-md hover:bg-amber-400 shadow-sm">Save Key</button>
-            </div>
-        </div>
+  <!-- ============ SETTINGS MODAL ============ -->
+  <div id="settingsModal" hidden class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4">
+    <div class="w-full max-w-sm panel-bg border border-subtle rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-bold text-white">Settings</h2>
+        <button id="closeSettingsBtn" class="text-neutral-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+
+      <label class="block text-xs text-neutral-400 mb-1">Apps Script Web App URL</label>
+      <input id="endpointInput" type="url" placeholder="https://script.google.com/macros/s/.../exec"
+        class="w-full input-bg border border-subtle rounded-lg px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:border-neutral-500">
+
+      <label class="block text-xs text-neutral-400 mb-1">Access Token</label>
+      <input id="tokenInput" type="password" placeholder="paste the token from Script Properties"
+        class="w-full input-bg border border-subtle rounded-lg px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-neutral-500">
+
+      <button id="saveSettingsBtn" class="w-full bg-white text-black text-sm font-bold py-2.5 rounded-lg mb-2">Save</button>
+      <button id="pullPeopleBtn" class="w-full bg-neutral-800 text-white text-sm font-medium py-2.5 rounded-lg mb-2">Pull Contacts Now</button>
+      <button id="retrySyncBtn" class="w-full bg-neutral-800 text-white text-sm font-medium py-2.5 rounded-lg">Retry Sync</button>
+
+      <p id="settingsStatus" class="mt-3 text-xs text-neutral-500"></p>
     </div>
+  </div>
 
-    <!-- Interactive Media Lightbox Overlay -->
-    <div id="imageViewerModal" class="hidden fixed inset-0 z-[60] bg-black/95 items-center justify-center p-2 md:p-8 backdrop-blur-sm transition-opacity">
-        <button onclick="closeImageViewer()" class="absolute top-4 right-4 md:top-6 md:right-6 text-neutral-400 hover:text-white p-2 z-[70] bg-black/50 rounded-full transition-colors"><i data-lucide="x" class="w-8 h-8"></i></button>
-        <img id="viewerImage" src="" class="max-w-full max-h-full object-contain rounded-md shadow-2xl">
+  <!-- ============ NOTE DETAIL MODAL ============ -->
+  <div id="noteDetailModal" hidden class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4">
+    <div class="w-full max-w-sm max-h-[85vh] overflow-y-auto panel-bg border border-subtle rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="detailPersonName" class="text-base font-bold text-white"></h2>
+        <button id="closeDetailBtn" class="text-neutral-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <p id="detailTimestamp" class="text-xs text-neutral-500 mb-3"></p>
+
+      <div class="mb-4">
+        <h3 class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">Raw note</h3>
+        <p id="detailRawText" class="text-sm text-neutral-200 whitespace-pre-wrap"></p>
+      </div>
+
+      <div id="detailStructuredWrap" hidden class="mb-4">
+        <h3 class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">Structured</h3>
+        <pre id="detailStructured" class="text-xs text-neutral-300 whitespace-pre-wrap"></pre>
+      </div>
+
+      <div id="detailGmailWrap" hidden>
+        <h3 class="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">Gmail context (frozen at save)</h3>
+        <div id="detailGmail" class="text-xs text-neutral-400 space-y-1"></div>
+      </div>
+
+      <div id="detailPendingNote" class="text-xs text-amber-500 mt-3"></div>
     </div>
+  </div>
 
-    <!-- Create Ticket Layout Modal Component -->
-    <div id="newJobModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-        <div class="panel-bg border border-subtle w-full max-w-md rounded-xl shadow-2xl flex flex-col">
-            <div class="p-5 border-b border-subtle flex items-center justify-between">
-                <h3 class="font-bold text-white text-lg">Create Job Ticket</h3>
-                <button onclick="closeNewJobModal()" class="text-neutral-400 hover:text-white p-1 rounded-md transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <div class="p-5 space-y-5">
-                <div>
-                    <label class="block text-xs font-semibold uppercase text-neutral-500 mb-1.5">Client / Project Name</label>
-                    <input type="text" id="newJobName" class="w-full input-bg border border-subtle rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:border-white transition-colors">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold uppercase text-neutral-500 mb-1.5">Address or Phase</label>
-                    <input type="text" id="newJobAddress" class="w-full input-bg border border-subtle rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:border-white transition-colors">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold uppercase text-neutral-500 mb-2">Pipeline Status</label>
-                    <div class="grid grid-cols-2 gap-2 mb-1">
-                        <button type="button" onclick="setModalStatus('contacted')" id="btn-status-contacted" class="status-btn bg-neutral-800 border border-neutral-600 text-white text-xs font-semibold py-2 rounded-md transition-colors shadow-sm">Contacted</button>
-                        <button type="button" onclick="setModalStatus('estimating')" id="btn-status-estimating" class="status-btn input-bg border border-subtle text-neutral-400 text-xs font-semibold py-2 rounded-md transition-colors hover:bg-neutral-800">Estimating</button>
-                        <button type="button" onclick="setModalStatus('quoted')" id="btn-status-quoted" class="status-btn input-bg border border-subtle text-neutral-400 text-xs font-semibold py-2 rounded-md transition-colors hover:bg-neutral-800">Quoted</button>
-                        <button type="button" onclick="setModalStatus('done')" id="btn-status-done" class="status-btn input-bg border border-subtle text-neutral-400 text-xs font-semibold py-2 rounded-md transition-colors hover:bg-neutral-800">Done</button>
-                        <button type="button" onclick="setModalStatus('completed')" id="btn-status-completed" class="status-btn col-span-2 input-bg border border-subtle text-neutral-400 text-xs font-semibold py-2 rounded-md transition-colors hover:bg-neutral-800">Completed</button>
-                    </div>
-                    <input type="hidden" id="newJobStatus" value="contacted">
-                </div>
-            </div>
-            <div class="p-5 border-t border-subtle flex justify-end gap-3 bg-[#0a0a0a] rounded-b-xl">
-                <button onclick="closeNewJobModal()" class="px-4 py-2.5 text-sm font-medium text-neutral-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="saveNewJob()" class="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-md hover:bg-neutral-200 transition-colors shadow-sm">Create Ticket</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Active Service Logic Module Execution Engine -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
-
-        // ==========================================
-        // SECURITY DEFINITION
-        // ==========================================
-        const APP_PIN = "1234"; // CHANGE THIS 4-DIGIT NUMBER TO YOUR DESIRED PASSCODE
-        // ==========================================
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyDR918XHKZd3oLFqCMnyrLBRmLe1TajH3E",
-            authDomain: "simplydoors-notes.firebaseapp.com",
-            projectId: "simplydoors-notes",
-            storageBucket: "simplydoors-notes.firebasestorage.app",
-            messagingSenderId: "170878926558",
-            appId: "1:170878926558:web:91981c762acfafd5fa8c4f"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const storage = getStorage(app);
-
-        let jobs = [];
-        let notes = [];
-        let currentOpenJobId = null;
-        let pendingImageData = null;
-        let isMobileDetailView = false;
-        let currentDashboardFilter = 'all';
-
-        // --- SECURITY & AUTHORIZATION LIFECYCLE ---
-        function checkPin(e) {
-            if (e.key === 'Enter' || e.target.value.length === 4) {
-                validatePin();
-            }
-        }
-
-        function validatePin() {
-            const input = document.getElementById('pinInput');
-            if (input.value === APP_PIN) {
-                sessionStorage.setItem('pm_session_unlocked', 'true');
-                const overlay = document.getElementById('securityOverlay');
-                overlay.classList.add('opacity-0', 'pointer-events-none');
-                setTimeout(() => overlay.classList.add('hidden'), 300);
-                initializeFirebaseListeners();
-            } else {
-                input.value = '';
-                input.classList.add('border-red-500');
-                setTimeout(() => input.classList.remove('border-red-500'), 500);
-            }
-        }
-
-        if (sessionStorage.getItem('pm_session_unlocked') === 'true') {
-            document.getElementById('securityOverlay').classList.add('hidden');
-            initializeFirebaseListeners();
-        } else {
-            setTimeout(() => document.getElementById('pinInput').focus(), 100);
-        }
-
-        // --- REAL-TIME DATABASE ENGINE SYNCHRONIZERS ---
-        function initializeFirebaseListeners() {
-            onSnapshot(collection(db, "jobs"), (snapshot) => {
-                jobs = [];
-                snapshot.forEach((doc) => { jobs.push({ id: doc.id, ...doc.data() }); });
-                renderDashboard();
-                renderJobHeader();
-                if(!document.getElementById('fastEntryOverlay').classList.contains('hidden') && !document.getElementById('overlayStep1').classList.contains('hidden')) {
-                    renderOverlayJobs(document.getElementById('overlayJobSearchInput').value);
-                }
-            });
-
-            onSnapshot(collection(db, "notes"), (snapshot) => {
-                notes = [];
-                snapshot.forEach((doc) => { notes.push({ id: doc.id, ...doc.data() }); });
-                renderDashboard();
-                if (currentOpenJobId) renderJobNotes();
-            });
-        }
-
-        document.addEventListener('click', (e) => {
-            const statusBtn = document.getElementById('detailJobStatus');
-            const statusMenu = document.getElementById('statusUpdateMenu');
-            if (statusBtn && !statusBtn.contains(e.target) && !statusMenu.contains(e.target)) {
-                statusMenu.classList.add('hidden');
-            }
-            const gSearchOverlay = document.getElementById('globalSearchOverlay');
-            const gSearchBtn = document.querySelector('button[onclick="toggleGlobalSearch()"]');
-            if(gSearchOverlay && !gSearchOverlay.classList.contains('hidden') && !gSearchOverlay.contains(e.target) && !gSearchBtn.contains(e.target)){
-                gSearchOverlay.classList.add('hidden');
-            }
-        });
-
-        // --- AI API CONFIG MANAGEMENT ---
-        function toggleApiKeyModal() {
-            const modal = document.getElementById('apiKeyModal');
-            modal.classList.toggle('hidden');
-            modal.classList.toggle('flex');
-            if(!modal.classList.contains('hidden')) {
-                document.getElementById('geminiApiKeyInput').value = localStorage.getItem('gemini_api_key') || '';
-            }
-        }
-        function saveApiKey() {
-            const val = document.getElementById('geminiApiKeyInput').value.trim();
-            if(val) {
-                localStorage.setItem('gemini_api_key', val);
-                toggleApiKeyModal();
-            }
-        }
-
-        // --- INTELLIGENT AI PARSER PIPELINE (Vision + Structured Output Engine) ---
-        async function processAILog() {
-            const apiKey = localStorage.getItem('gemini_api_key');
-            if (!apiKey) {
-                alert("Please configure your Gemini API Key via the hardware settings icon.");
-                toggleApiKeyModal();
-                return;
-            }
-
-            const simplifiedJobs = jobs.filter(j => !j.archived).map(j => ({ id: j.id, name: j.name, address: j.address }));
-            
-            if (simplifiedJobs.length === 0) {
-                alert("SYSTEM HALT: You must create at least one active Job Ticket before the AI can route your field notes.");
-                closeFastEntry();
-                return;
-            }
-
-            const rawText = document.getElementById('quickNoteText').value.trim();
-            if (!rawText && !pendingImageData) {
-                return alert("Please enter text, paste an email, or provide a field image to process.");
-            }
-
-            const currentTargetId = document.getElementById('quickNoteJobId').value;
-            const currentTargetName = document.getElementById('overlaySelectedJobName').innerText;
-
-            const aiBtn = document.getElementById('aiLogBtn');
-            const originalIcon = aiBtn.innerHTML;
-            aiBtn.innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin text-amber-400"></i>';
-            lucide.createIcons();
-            aiBtn.disabled = true;
-
-            try {
-                const genAI = new GoogleGenerativeAI(apiKey);
-                
-                // CRITICAL UPGRADE: Forcing the SDK to return mathematical JSON natively.
-                const model = genAI.getGenerativeModel({ 
-                    model: "gemini-2.5-flash",
-                    generationConfig: {
-                        responseMimeType: "application/json"
-                    }
-                });
-
-                const targetInstruction = currentTargetId 
-                    ? `\nCRITICAL ROUTING: The user has already selected the job "${currentTargetName}" (ID: ${currentTargetId}). You MUST use this jobId in your JSON output unless the prompt explicitly dictates a different active job.`
-                    : "";
-
-                const systemPrompt = `You are a dedicated internal project management analyzer for SimplyDoors. 
-Your responsibility is parsing messy text inputs, mobile dictations, and analyzing field images.
-
-CRITICAL DOMAIN TERM DICTIONARY:
-- If visual/text references "composite" threshold, rewrite as "bump/contractor threshold".
-- If visual/text references "standard door", resolve to "8 panel steel" door.
-
-ACTIVE INSTANCE REGISTRY LIST: ${JSON.stringify(simplifiedJobs)}
-${targetInstruction}
-
-INSTRUCTIONS:
-1. Strip standard website auto-generated text or structural email headers.
-2. If an image is provided, analyze it. Extract quantities, materials, configurations, and visible site hurdles. Incorporate these visual observations into your summary.
-3. Isolate terms matching items to active records in our system registry.
-4. Your output MUST be a strict, valid JSON array. 
-Data Structure: [{"action": "log_note", "jobId": "the-matched-id", "content": "The formatted contextual update note, including all visual findings and text data."}]`;
-
-                // CRITICAL UPGRADE: Multi-Modal Parts Array
-                const promptParts = [
-                    systemPrompt,
-                    "\n\nRAW USER INPUT TEXT:\n" + (rawText || "(No text provided. Rely entirely on the image analysis.)")
-                ];
-
-                if (pendingImageData) {
-                    // Strip the base64 prefix so Gemini can read the raw binary data
-                    const base64Data = pendingImageData.split(',')[1];
-                    promptParts.push({
-                        inlineData: {
-                            data: base64Data,
-                            mimeType: "image/jpeg"
-                        }
-                    });
-                }
-
-                // Send the multi-modal array to the model
-                const result = await model.generateContent(promptParts);
-                
-                // Because of responseMimeType, we don't need regex. We just parse it.
-                let actions;
-                try {
-                    actions = JSON.parse(result.response.text());
-                } catch (parseError) {
-                    throw new Error("The AI failed to lock its output to the forced JSON schema. Please retry.");
-                }
-                
-                if (!Array.isArray(actions) || actions.length === 0) {
-                     throw new Error("The AI successfully read the data, but returned an empty structural action array.");
-                }
-
-                for (const action of actions) {
-                    const finalJobId = action.jobId || currentTargetId;
-
-                    if (!finalJobId) {
-                         throw new Error("The AI successfully formatted the data, but could not match it to any active jobs. Please select the job manually from the list.");
-                    }
-
-                    // Push the image to Firebase Storage so it isn't lost
-                    let imageUrl = null;
-                    if (pendingImageData) {
-                        const storageRef = ref(storage, `notes_images/${Date.now()}_field_asset.jpg`);
-                        await uploadString(storageRef, pendingImageData, 'data_url');
-                        imageUrl = await getDownloadURL(storageRef);
-                    }
-
-                    const noteRef = doc(collection(db, "notes"));
-                    await setDoc(noteRef, {
-                        id: noteRef.id,
-                        jobId: finalJobId,
-                        content: action.content || rawText || "Analyzed Visual Data Logged.",
-                        image: imageUrl,
-                        pinned: false,
-                        timestamp: new Date().toISOString()
-                    });
-                    await updateDoc(doc(db, "jobs", finalJobId), { updatedAt: new Date().toISOString() });
-                }
-
-                resetTextarea();
-                clearImage();
-                closeFastEntry();
-                
-                const destinationJob = actions[0].jobId || currentTargetId;
-                if(destinationJob) openJobDetail(destinationJob);
-
-            } catch (error) {
-                console.error("Contextual Engine Exception: ", error);
-                alert(`AI EXECUTION FAILURE:\n\n${error.message}\n\nIf this says 'API key not valid' or 'API not enabled', please verify your Google Cloud Console settings and ensure your key doesn't have spaces at the end.`);
-            } finally {
-                aiBtn.innerHTML = originalIcon;
-                aiBtn.disabled = false;
-                lucide.createIcons();
-            }
-        }
-
-        // --- HARDWARE CAMERA RESOLUTION REDUCTION LOOP ---
-        function handleImageSelection(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const MAX_DIMENSION = 1000;
-                    let width = img.width, height = img.height;
-                    if (width > height && width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } 
-                    else if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; }
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    pendingImageData = canvas.toDataURL('image/jpeg', 0.6);
-                    document.getElementById('imagePreview').src = pendingImageData;
-                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
-                };
-                img.src = e.target.result;
-            }
-            reader.readAsDataURL(file);
-        }
-
-        function clearImage() {
-            pendingImageData = null;
-            document.getElementById('cameraInput').value = '';
-            document.getElementById('imagePreviewContainer').classList.add('hidden');
-            document.getElementById('imagePreview').src = '';
-        }
-
-        // --- DATA WRITE OPERATIONS (Firestore + Storage Bucket Interconnects) ---
-        async function submitQuickNote() {
-            const hiddenId = document.getElementById('quickNoteJobId');
-            const btn = document.getElementById('submitNoteBtn');
-            const textEl = document.getElementById('quickNoteText');
-            const text = textEl.value.trim(), jobId = hiddenId.value;
-
-            if (!text && !pendingImageData) return alert('Input parameters missing. Provide text or snap clear field imagery.');
-            if (!jobId || !jobs.find(j => String(j.id) === String(jobId))) return alert('Data validation mismatch. Project terminal structural target lost.');
-
-            btn.disabled = true;
-
-            try {
-                let imageUrl = null;
-                if (pendingImageData) {
-                    const storageRef = ref(storage, `notes_images/${Date.now()}.jpg`);
-                    await uploadString(storageRef, pendingImageData, 'data_url');
-                    imageUrl = await getDownloadURL(storageRef);
-                }
-
-                const noteRef = doc(collection(db, "notes"));
-                await setDoc(noteRef, {
-                    id: noteRef.id,
-                    jobId: jobId,
-                    content: text,
-                    image: imageUrl,
-                    pinned: false,
-                    timestamp: new Date().toISOString()
-                });
-
-                await updateDoc(doc(db, "jobs", jobId), { updatedAt: new Date().toISOString() });
-
-                const originalText = btn.innerHTML;
-                btn.innerHTML = 'Saved to Cloud ✓';
-                btn.classList.replace('bg-white', 'bg-emerald-500');
-                btn.classList.replace('text-black', 'text-white');
-                
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.classList.replace('bg-emerald-500', 'bg-white');
-                    btn.classList.replace('text-white', 'text-black');
-                    btn.disabled = false;
-                    resetTextarea();
-                    clearImage();
-                    closeFastEntry();
-                    openJobDetail(jobId);
-                }, 1000);
-            } catch (e) {
-                console.error("Storage Matrix Sync Fault: ", e);
-                alert("Cloud transactional write rejected. Your test-mode database rules may have expired.");
-                btn.disabled = false;
-            }
-        }
-
-        async function saveNewJob() {
-            const name = document.getElementById('newJobName').value.trim();
-            const address = document.getElementById('newJobAddress').value.trim();
-            const status = document.getElementById('newJobStatus').value;
-            if (!name) return alert('Project target naming structural designation required.');
-
-            const timestamp = new Date().toISOString();
-            try {
-                const jobRef = doc(collection(db, "jobs"));
-                const newId = jobRef.id;
-                await setDoc(jobRef, {
-                    id: newId, name, address, status,
-                    archived: false, createdAt: timestamp, updatedAt: timestamp 
-                });
-                closeNewJobModal();
-                setDashboardFilter(status);
-                openJobDetail(newId);
-            } catch(e) { alert("Initialization failure."); }
-        }
-
-        // --- OVERLAY INTERFACE MECHANICS ---
-        function openFastEntry() {
-            const overlay = document.getElementById('fastEntryOverlay');
-            overlay.classList.remove('hidden'); overlay.classList.add('flex');
-            if (currentOpenJobId) {
-                const activeJob = jobs.find(j => String(j.id) === String(currentOpenJobId));
-                if (activeJob && !activeJob.archived) {
-                    selectOverlayJob(activeJob.id, activeJob.name, activeJob.address);
-                    return;
-                }
-            }
-            goBackToStep1();
-        }
-
-        function closeFastEntry() {
-            const overlay = document.getElementById('fastEntryOverlay');
-            overlay.classList.add('hidden'); overlay.classList.remove('flex');
-            resetTextarea(); clearImage();
-        }
-
-        function goBackToStep1() {
-            document.getElementById('quickNoteJobId').value = '';
-            document.getElementById('overlayStep2').classList.add('hidden');
-            document.getElementById('overlayStep1').classList.remove('hidden');
-            document.getElementById('overlayBackButton').classList.add('hidden');
-            document.getElementById('overlayTitle').innerText = "Step 1: Select Project";
-            document.getElementById('overlayJobSearchInput').value = '';
-            renderOverlayJobs('');
-        }
-
-        function selectOverlayJob(jobId, jobName, jobAddress) {
-            document.getElementById('quickNoteJobId').value = jobId;
-            document.getElementById('overlaySelectedJobName').innerText = jobName;
-            document.getElementById('overlaySelectedJobAddress').innerText = jobAddress || 'No Registered Location';
-            document.getElementById('overlayStep1').classList.add('hidden');
-            document.getElementById('overlayStep2').classList.remove('hidden');
-            document.getElementById('overlayBackButton').classList.remove('hidden');
-            document.getElementById('overlayTitle').innerText = "Step 2: Log Site Update";
-        }
-
-        function renderOverlayJobs(query = '') {
-            const listEl = document.getElementById('overlayJobList');
-            if(!listEl) return;
-            const q = query.toLowerCase().trim();
-            const filtered = jobs.filter(j => !j.archived && (j.name.toLowerCase().includes(q) || j.address.toLowerCase().includes(q)));
-            
-            if (filtered.length === 0) {
-                listEl.innerHTML = `<div class="p-6 text-center text-sm text-neutral-500 bg-[#121212] rounded-xl border border-subtle">No corresponding data indices matched search.</div>`;
-                return;
-            }
-            listEl.innerHTML = filtered.map(job => `
-                <div onclick="selectOverlayJob('${job.id}', \`${job.name.replace(/'/g, "\\'")}\`, \`${job.address.replace(/'/g, "\\'")}\`)" class="p-5 bg-[#121212] border border-[#262626] hover:border-neutral-500 rounded-xl cursor-pointer transition-all active:scale-[0.99] flex items-center justify-between group">
-                    <div class="truncate pr-3">
-                        <h4 class="font-bold text-white text-base truncate">${job.name}</h4>
-                        <p class="text-xs text-neutral-400 truncate mt-1">${job.address || 'No Address Listed'}</p>
-                    </div>
-                    <div class="p-2 rounded-lg bg-[#1a1a1a] group-hover:bg-neutral-800 text-neutral-500 group-hover:text-white transition-colors shrink-0">
-                        <i data-lucide="chevron-right" class="w-5 h-5"></i>
-                    </div>
-                </div>`).join('');
-            lucide.createIcons();
-        }
-
-        // --- DASHBOARD AND UTILITY CORE ---
-        function renderDashboard() {
-            const listEl = document.getElementById('jobListContainer');
-            if(!listEl) return;
-            const activeJobs = jobs.filter(j => !j.archived && (currentDashboardFilter === 'all' || j.status === currentDashboardFilter))
-                                   .sort((a,b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-            
-            if (activeJobs.length === 0) {
-                listEl.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-10 px-4 text-neutral-600 border border-dashed border-[#262626] rounded-xl bg-[#0a0a0a]">
-                        <i data-lucide="inbox" class="w-10 h-10 mb-3 opacity-30"></i>
-                        <p class="text-xs font-medium uppercase tracking-wider">No active parameters in current channel.</p>
-                    </div>`;
-                return;
-            }
-
-            listEl.innerHTML = activeJobs.map(job => {
-                const count = notes.filter(n => String(n.jobId) === String(job.id)).length;
-                const borderClass = `border-l-4 border-t border-r border-b status-${job.status}`;
-                const isSelected = String(currentOpenJobId) === String(job.id) ? 'bg-[#1a1a1a] shadow-inner' : 'panel-bg shadow-sm';
-                return `
-                    <div class="relative rounded-lg overflow-hidden border border-transparent mb-3 bg-[#0a0a0a]" ontouchstart="tStart(event)" ontouchend="tEnd(event, '${job.id}')">
-                        <div class="absolute inset-0 flex justify-between z-0">
-                            <div class="w-20 bg-blue-950 flex flex-col items-center justify-center text-blue-400 cursor-pointer" onclick="updateJobStatusQuick('${job.id}')">
-                                <i data-lucide="sliders-horizontal" class="w-5 h-5 mb-1"></i><span class="text-[9px] font-bold uppercase tracking-wider">Status</span>
-                            </div>
-                            <div class="w-20 bg-red-950 flex flex-col items-center justify-center text-red-500 cursor-pointer" onclick="quickArchiveJob('${job.id}')">
-                                <i data-lucide="archive" class="w-5 h-5 mb-1"></i><span class="text-[9px] font-bold uppercase tracking-wider">Archive</span>
-                            </div>
-                        </div>
-                        <div id="swipe-card-${job.id}" class="swipe-card relative z-10 ${isSelected} ${borderClass} rounded-lg p-4 flex items-center justify-between cursor-pointer hover:border-neutral-500" onclick="openJobDetail('${job.id}')">
-                            <div class="truncate pr-3">
-                                <h3 class="font-bold text-neutral-200 text-sm truncate">${job.name}</h3>
-                                <p class="text-xs text-neutral-500 mt-1 truncate">${job.address}</p>
-                                <div class="mt-2 text-[10px] text-neutral-600 font-medium tracking-wide"><i data-lucide="clock" class="w-3 h-3 inline pb-0.5"></i> ${timeAgo(job.updatedAt || job.createdAt)}</div>
-                            </div>
-                            <span class="text-[10px] text-neutral-400 bg-black px-2 py-0.5 rounded border border-subtle font-medium h-fit">${count} logs</span>
-                        </div>
-                    </div>`;
-            }).join('');
-            lucide.createIcons();
-        }
-
-        function renderJobHeader() {
-            if (!currentOpenJobId) return;
-            const job = jobs.find(j => String(j.id) === String(currentOpenJobId));
-            if (!job) return;
-            document.getElementById('detailJobName').innerText = job.name;
-            const addrEl = document.getElementById('detailJobAddress');
-            if (job.address) {
-                addrEl.innerHTML = `<i data-lucide="map-pin" class="w-3.5 h-3.5"></i> ${job.address}`;
-                addrEl.href = `https://maps.apple.com/?q=${encodeURIComponent(job.address)}`;
-                addrEl.classList.remove('hidden');
-            } else { addrEl.classList.add('hidden'); }
-            const statusBtn = document.getElementById('detailJobStatus');
-            const statusText = document.getElementById('detailJobStatusText');
-            const stylingMap = {
-                'contacted': { text: 'Contacted', class: 'bg-neutral-800 text-neutral-400 border-neutral-600' },
-                'estimating': { text: 'Estimating', class: 'bg-blue-950 text-blue-400 border-blue-900' },
-                'quoted': { text: 'Quoted', class: 'bg-amber-950 text-amber-500 border-amber-900' },
-                'done': { text: 'Done', class: 'bg-emerald-950 text-emerald-500 border-emerald-900' },
-                'completed': { text: 'Completed', class: 'bg-purple-950 text-purple-400 border-purple-900' }
-            };
-            const sMap = stylingMap[job.status] || stylingMap['contacted'];
-            statusText.innerText = sMap.text;
-            statusBtn.className = `text-[10px] uppercase font-bold px-2 py-1 rounded-sm border flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${sMap.class}`;
-            lucide.createIcons();
-        }
-
-        function renderJobNotes() {
-            const feedEl = document.getElementById('jobNotesFeed');
-            if(!feedEl) return;
-            const jobNotes = notes.filter(n => String(n.jobId) === String(currentOpenJobId))
-                                  .sort((a, b) => (a.pinned === b.pinned) ? new Date(a.timestamp) - new Date(b.timestamp) : a.pinned ? -1 : 1);
-            if (jobNotes.length === 0) {
-                feedEl.innerHTML = `
-                <div class="flex-1 flex flex-col items-center justify-center text-neutral-600 py-12">
-                    <i data-lucide="message-square" class="w-10 h-10 mb-3 opacity-20"></i>
-                    <p class="text-sm font-medium">Clear log profile. Target folder empty.</p>
-                </div>`;
-                return;
-            }
-            let htmlBuffer = '', lastDateString = '';
-            jobNotes.forEach(note => {
-                const dateObj = new Date(note.timestamp);
-                const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const displayDate = (dateObj.toDateString() === new Date().toDateString()) ? "Today" : dateObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-                
-                if(displayDate !== lastDateString) {
-                    htmlBuffer += `
-                        <div class="w-full flex items-center gap-4 my-2">
-                            <div class="h-px bg-[#1f1f1f] flex-1"></div>
-                            <span class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">${displayDate}</span>
-                            <div class="h-px bg-[#1f1f1f] flex-1"></div>
-                        </div>`;
-                    lastDateString = displayDate;
-                }
-
-                const imgHtml = note.image ? `
-                    <div class="relative w-full h-48 mb-3 rounded-md overflow-hidden border border-subtle bg-black cursor-pointer group/img" onclick="openImageViewer('${note.image}')">
-                        <img src="${note.image}" class="w-full h-full object-contain group-hover/img:opacity-75 transition-opacity">
-                    </div>` : '';
-                const pinClass = note.pinned ? 'pinned-note shadow-lg' : 'panel-bg shadow-md';
-                const pinIconColor = note.pinned ? 'text-amber-500' : 'text-neutral-300';
-                const pinBadge = note.pinned ? `<div class="absolute -top-2 -left-2 bg-amber-950 border border-amber-900 text-amber-500 rounded-full p-1 shadow-md z-10"><i data-lucide="pin" class="w-3 h-3 fill-current"></i></div>` : '';
-
-                htmlBuffer += `
-                    <div class="border border-subtle p-4 rounded-xl w-full md:w-[90%] self-end group relative ${pinClass}">
-                        ${pinBadge}
-                        <div class="absolute -top-3 -right-3 hidden group-hover:flex gap-1.5 z-10">
-                            <button onclick="togglePin(event, '${note.id}')" class="bg-neutral-800 ${pinIconColor} border border-neutral-600 rounded-full p-2 shadow-lg hover:bg-neutral-700 transition-colors">
-                                <i data-lucide="pin" class="w-3.5 h-3.5 ${note.pinned ? 'fill-current' : ''}"></i>
-                            </button>
-                            <button onclick="startEdit(event, '${note.id}')" class="bg-neutral-800 text-neutral-300 border border-neutral-600 rounded-full p-2 shadow-lg hover:bg-neutral-700 hover:text-white transition-colors">
-                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                            </button>
-                            <button onclick="deleteNote(event, '${note.id}')" class="bg-red-950 text-red-500 border border-red-900 rounded-full p-2 shadow-lg hover:bg-red-900 hover:text-white transition-colors">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                            </button>
-                        </div>
-                        ${imgHtml}
-                        <div id="note-display-${note.id}" class="text-[15px] text-neutral-200 whitespace-pre-wrap leading-relaxed">${note.content}</div>
-                        <div id="note-edit-${note.id}" class="hidden flex-col gap-2 mt-1">
-                            <textarea id="edit-textarea-${note.id}" class="w-full input-bg border border-subtle rounded-md p-3 text-sm text-white resize-none focus:outline-none focus:border-neutral-500" rows="3">${note.content}</textarea>
-                            <div class="flex justify-end gap-2 mt-2">
-                                <button onclick="cancelEdit('${note.id}')" class="text-xs text-neutral-400 px-3 py-1.5">Cancel</button>
-                                <button onclick="saveEdit('${note.id}')" class="text-xs bg-white text-black font-bold px-4 py-1.5 rounded-md">Save Update</button>
-                            </div>
-                        </div>
-                        <div class="flex justify-end mt-3 pt-3 border-t border-[#1f1f1f]">
-                            <span class="text-[10px] font-medium text-neutral-500 tracking-wider">${timeString}</span>
-                        </div>
-                    </div>`;
-            });
-            feedEl.innerHTML = htmlBuffer;
-            feedEl.scrollTop = feedEl.scrollHeight;
-            lucide.createIcons();
-        }
-
-        function openJobDetail(jobId) {
-            currentOpenJobId = jobId; renderJobHeader();
-            document.getElementById('emptyDetailState').classList.add('hidden');
-            document.getElementById('jobDetailHeader').classList.remove('hidden');
-            document.getElementById('jobNotesFeed').classList.remove('hidden');
-            document.querySelectorAll('.swipe-card').forEach(el => el.style.transform = 'translateX(0)');
-            renderDashboard(); renderJobNotes();
-            if (window.innerWidth < 768) { isMobileDetailView = true; applyMobileView(); }
-        }
-
-        function executeGlobalSearch(query) {
-            const container = document.getElementById('globalSearchResults'); container.innerHTML = ''; container.classList.remove('hidden');
-            const q = query.toLowerCase().trim(); if(!q) return;
-            let resultsHTML = '', matches = 0;
-
-            jobs.filter(j => !j.archived).forEach(job => {
-                if(job.name.toLowerCase().includes(q) || job.address.toLowerCase().includes(q)) {
-                    resultsHTML += `<div onclick="jumpToJob('${job.id}')" class="p-3 bg-[#1a1a1a] hover:bg-[#262626] rounded-md cursor-pointer border border-subtle flex items-center justify-between group transition-colors"><div><span class="text-xs font-bold text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded mr-2">Project</span><span class="text-sm font-medium text-white">${job.name}</span><p class="text-xs text-neutral-500 mt-0.5">${job.address}</p></div><i data-lucide="arrow-right" class="w-4 h-4 text-neutral-600 group-hover:text-white"></i></div>`;
-                    matches++;
-                }
-            });
-            notes.forEach(note => {
-                if(note.content && note.content.toLowerCase().includes(q)) {
-                    const parentJob = jobs.find(j => String(j.id) === String(note.jobId));
-                    if(parentJob && !parentJob.archived) {
-                        resultsHTML += `<div onclick="jumpToJob('${parentJob.id}')" class="p-3 bg-[#1a1a1a] hover:bg-[#262626] rounded-md cursor-pointer border border-subtle flex items-center justify-between group transition-colors"><div class="pr-4"><span class="text-xs font-bold text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded mr-2">Log</span><span class="text-[10px] text-neutral-500">${parentJob.name}</span><p class="text-xs text-neutral-300 mt-1 line-clamp-2">${note.content}</p></div><i data-lucide="arrow-right" class="w-4 h-4 text-neutral-600 group-hover:text-white shrink-0"></i></div>`;
-                        matches++;
-                    }
-                }
-            });
-            if(matches === 0) resultsHTML = `<div class="p-4 text-center text-xs text-neutral-500">No projects or logged data matches indexing parameters.</div>`;
-            container.innerHTML = resultsHTML; lucide.createIcons();
-        }
-
-        async function deleteNote(event, noteId) { event.stopPropagation(); if(confirm('Permanently wipe this structural log parameter?')) { try { await deleteDoc(doc(db, "notes", noteId)); } catch(e) { console.error(e); } } }
-        async function togglePin(event, noteId) { event.stopPropagation(); const note = notes.find(n => String(n.id) === String(noteId)); if (note) { try { await updateDoc(doc(db, "notes", noteId), { pinned: !note.pinned }); } catch(e) { console.error(e); } } }
-        async function saveEdit(noteId) { const textarea = document.getElementById(`edit-textarea-${noteId}`); try { await updateDoc(doc(db, "notes", noteId), { content: textarea.value.trim() }); } catch(e) { console.error(e); } }
-        async function quickArchiveJob(jobId) { if(confirm('Archive this ticket instance?')) { try { await updateDoc(doc(db, "jobs", jobId), { archived: true }); if(currentOpenJobId === jobId) { currentOpenJobId = null; document.getElementById('jobDetailHeader').classList.add('hidden'); document.getElementById('jobNotesFeed').classList.add('hidden'); document.getElementById('emptyDetailState').classList.remove('hidden'); if (window.innerWidth < 768) toggleMobileView(); } } catch(e) { console.error(e); } } }
-        async function updateJobStatusQuick(jobId) { const job = jobs.find(j => String(j.id) === String(jobId)); if (job) { const flow = ['contacted', 'estimating', 'quoted', 'done', 'completed']; let nextIdx = flow.indexOf(job.status) + 1; if(nextIdx >= flow.length) nextIdx = 0; try { await updateDoc(doc(db, "jobs", jobId), { status: flow[nextIdx], updatedAt: new Date().toISOString() }); const card = document.getElementById('swipe-card-' + jobId); if(card) card.style.transform = 'translateX(0)'; } catch(e) { console.error(e); } } }
-        async function updateJobStatus(newStatus) { if (!currentOpenJobId) return; try { await updateDoc(doc(db, "jobs", currentOpenJobId), { status: newStatus, updatedAt: new Date().toISOString() }); document.getElementById('statusUpdateMenu').classList.add('hidden'); } catch (e) { console.error(e); } }
-
-        function toggleGlobalSearch() { const overlay = document.getElementById('globalSearchOverlay'); overlay.classList.toggle('hidden'); if(!overlay.classList.contains('hidden')){ document.getElementById('globalSearchInput').focus(); executeGlobalSearch(''); } }
-        function setDashboardFilter(status) { currentDashboardFilter = status; document.querySelectorAll('.filter-btn').forEach(btn => { btn.className = 'filter-btn input-bg text-neutral-500 text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-subtle whitespace-nowrap shrink-0 transition-colors hover:text-white'; }); document.getElementById(`flt-${status}`).className = 'filter-btn bg-neutral-800 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-full border border-neutral-600 whitespace-nowrap shrink-0 transition-colors'; renderDashboard(); }
-        function toggleMobileView() { isMobileDetailView = !isMobileDetailView; applyMobileView(); }
-        function applyMobileView() { const left = document.getElementById('leftPanel'), right = document.getElementById('rightPanel'), toggleBtn = document.getElementById('mobileToggleBtn'); if (isMobileDetailView) { left.classList.add('-translate-x-full'); right.classList.remove('hidden', 'translate-x-full'); toggleBtn.innerText = 'Active Board'; } else { left.classList.remove('-translate-x-full'); right.classList.add('translate-x-full'); setTimeout(() => right.classList.add('hidden'), 300); toggleBtn.innerText = 'View Job Details'; } }
-        function jumpToJob(jobId) { toggleGlobalSearch(); openJobDetail(jobId); }
-        function startEdit(event, noteId) { event.stopPropagation(); document.getElementById(`note-display-${noteId}`).classList.add('hidden'); document.getElementById(`note-edit-${noteId}`).classList.remove('hidden'); }
-        function cancelEdit(noteId) { document.getElementById(`note-display-${noteId}`).classList.remove('hidden'); document.getElementById(`note-edit-${noteId}`).classList.add('hidden'); }
-        function toggleStatusMenu(e) { e.stopPropagation(); document.getElementById('statusUpdateMenu').classList.toggle('hidden'); }
-        function openNewJobModal() { document.getElementById('newJobName').value = ''; document.getElementById('newJobAddress').value = ''; setModalStatus('contacted'); document.getElementById('newJobModal').classList.remove('hidden'); document.getElementById('newJobModal').classList.add('flex'); }
-        function closeNewJobModal() { document.getElementById('newJobModal').classList.add('hidden'); document.getElementById('newJobModal').classList.remove('flex'); }
-        function setModalStatus(status) { document.getElementById('newJobStatus').value = status; document.querySelectorAll('.status-btn').forEach(btn => { btn.className = 'status-btn input-bg border border-subtle text-neutral-400 text-xs font-semibold py-2 rounded-md transition-colors hover:bg-neutral-800'; }); document.getElementById(`btn-status-${status}`).className = 'status-btn bg-neutral-800 border border-neutral-600 text-white text-xs font-semibold py-2 rounded-md transition-colors shadow-sm'; if(status==='completed') document.getElementById('btn-status-completed').className += ' col-span-2'; }
-        function openImageViewer(src) { document.getElementById('viewerImage').src = src; const modal = document.getElementById('imageViewerModal'); modal.classList.remove('hidden'); modal.classList.add('flex'); }
-        function closeImageViewer() { const modal = document.getElementById('imageViewerModal'); modal.classList.add('hidden'); modal.classList.remove('flex'); document.getElementById('viewerImage').src = ''; }
-        function autoExpand(field) { field.style.height = '1px'; field.style.height = field.scrollHeight + 'px'; }
-        function resetTextarea() { const field = document.getElementById('quickNoteText'); if (field) { field.value = ''; field.style.height = 'auto'; } }
-        function archiveCurrentJob() { if (currentOpenJobId) quickArchiveJob(currentOpenJobId); }
-        let swipeStartX = 0; function tStart(e) { swipeStartX = e.changedTouches[0].screenX; } function tEnd(e, elId) { let endX = e.changedTouches[0].screenX, el = document.getElementById('swipe-card-' + elId); if (!el) return; if (swipeStartX - endX > 50) el.style.transform = 'translateX(-70px)'; else if (endX - swipeStartX > 50) el.style.transform = 'translateX(70px)'; else el.style.transform = 'translateX(0)'; }
-        function timeAgo(dateString) { if(!dateString) return ''; const seconds = Math.floor((new Date() - new Date(dateString)) / 1000); let interval = seconds / 86400; if (interval > 1) return Math.floor(interval) + "d ago"; interval = seconds / 3600; if (interval > 1) return Math.floor(interval) + "h ago"; interval = seconds / 60; if (interval > 1) return Math.floor(interval) + "m ago"; return "Just now"; }
-
-        // Global exposure bridge for layout modules
-        window.openFastEntry = openFastEntry; window.closeFastEntry = closeFastEntry; window.goBackToStep1 = goBackToStep1; window.selectOverlayJob = selectOverlayJob; window.renderOverlayJobs = renderOverlayJobs; window.autoExpand = autoExpand; window.toggleGlobalSearch = toggleGlobalSearch; window.executeGlobalSearch = executeGlobalSearch; window.jumpToJob = jumpToJob; window.setDashboardFilter = setDashboardFilter; window.toggleStatusMenu = toggleStatusMenu; window.updateJobStatus = updateJobStatus; window.handleImageSelection = handleImageSelection; window.clearImage = clearImage; window.openImageViewer = openImageViewer; window.closeImageViewer = closeImageViewer; window.submitQuickNote = submitQuickNote; window.setModalStatus = setModalStatus; window.openNewJobModal = openNewJobModal; window.closeNewJobModal = closeNewJobModal; window.saveNewJob = saveNewJob; window.deleteNote = deleteNote; window.togglePin = togglePin; window.startEdit = startEdit; window.cancelEdit = cancelEdit; window.saveEdit = saveEdit; window.quickArchiveJob = quickArchiveJob; window.archiveCurrentJob = archiveCurrentJob; window.updateJobStatusQuick = updateJobStatusQuick; window.openJobDetail = openJobDetail; window.toggleMobileView = toggleMobileView; window.tStart = tStart; window.tEnd = tEnd; window.toggleApiKeyModal = toggleApiKeyModal; window.saveApiKey = saveApiKey; window.processAILog = processAILog; window.checkPin = checkPin; window.validatePin = validatePin;
-    </script>
+  <script src="app.js"></script>
 </body>
 </html>
